@@ -2,17 +2,11 @@
 # -*- coding: utf-8 -*-
 # maintainer: Fadiga
 
-
+import logging
 from datetime import datetime
 
-from Common.ui.common import (
-    BttExportPDF,
-    BttExportXLSX,
-    Button,
-    FormLabel,
-    FWidget,
-    LineEdit,
-)
+from Common.ui.common import (BttExportPDF, BttExportXLSX, Button, FormLabel,
+                              FWidget, LineEdit)
 from Common.ui.table import FTableWidget, TotalsWidget
 from Common.ui.util import is_float
 from configuration import Config
@@ -20,16 +14,19 @@ from data_helper import device_amount
 from models import Payment, ProviderOrClient
 from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QFont, QIcon, QPixmap
-from PyQt5.QtWidgets import (
-    QGridLayout,
-    QHBoxLayout,
-    QListWidget,
-    QListWidgetItem,
-    QMenu,
-    QSplitter,
-)
+from PyQt5.QtWidgets import (QGridLayout, QHBoxLayout, QListWidget,
+                             QListWidgetItem, QMenu, QSplitter)
 from ui.payment_edit_add import EditOrAddPaymentrDialog
 from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
+
+# Configuration du logger
+logging.basicConfig(
+    level=logging.DEBUG,  # Niveau du logger (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Format du message
+    datefmt='%Y-%m-%d %H:%M:%S',  # Format de la date
+)
+logger = logging.getLogger(__name__)
+
 
 ALL_CONTACTS = "TOUS"
 
@@ -40,6 +37,8 @@ class DebtsViewWidget(FWidget):
 
     def __init__(self, parent=0, *args, **kwargs):
         super(DebtsViewWidget, self).__init__(parent=parent, *args, **kwargs)
+
+        logger.debug("DebtsViewWidget init")
         self.parent = parent
         self.parentWidget().setWindowTitle(Config.APP_NAME + " Gestion des dettes")
 
@@ -49,7 +48,6 @@ class DebtsViewWidget(FWidget):
 
         self.label_balance = FormLabel("")
         self.label_owner = FormLabel("")
-        print(f"djdjs %s")
 
         if Config.CISS:
             self.table = RapportCISSTableWidget(parent=self)
@@ -101,23 +99,23 @@ class DebtsViewWidget(FWidget):
         self.splt_add = QSplitter(Qt.Horizontal)
         self.splt_add.setLayout(editbox)
 
-        # self.splitter_left = QSplitter(Qt.Vertical)
-        # self.splitter_left.addWidget(self.search_field)
-        # self.splitter_left.addWidget(self.table_provid_clt)
-        # self.splitter_left.addWidget(self.add_prov_btt)
+        self.splitter_left = QSplitter(Qt.Vertical)
+        self.splitter_left.addWidget(self.search_field)
+        self.splitter_left.addWidget(self.table_provid_clt)
+        self.splitter_left.addWidget(self.add_prov_btt)
 
-        # self.splt_clt = QSplitter(Qt.Vertical)
-        # self.splt_clt.addWidget(self.splt_add)
-        # self.splt_clt.addWidget(self.table)
-        # self.splt_clt.addWidget(self.label_balance)
-        # self.splt_clt.resize(900, 1000)
+        self.splt_clt = QSplitter(Qt.Vertical)
+        self.splt_clt.addWidget(self.splt_add)
+        self.splt_clt.addWidget(self.table)
+        self.splt_clt.addWidget(self.label_balance)
+        self.splt_clt.resize(900, 1000)
 
-        # splitter = QSplitter(Qt.Horizontal)
-        # splitter.addWidget(self.splitter_left)
-        # splitter.addWidget(self.splt_clt)
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.splitter_left)
+        splitter.addWidget(self.splt_clt)
 
         hbox = QHBoxLayout(self)
-        # hbox.addWidget(splitter)
+        hbox.addWidget(splitter)
         self.setLayout(hbox)
 
     def refresh_period(self):
