@@ -150,6 +150,23 @@ def ensure_default_owner(cursor):
     
     if not owner:
         print("Création d'un Owner par défaut...")
+        
+        # Vérifier d'abord si un Owner avec username "admin" existe déjà
+        cursor.execute("SELECT id, islog FROM owner WHERE username = ? LIMIT 1", ("admin",))
+        existing_admin = cursor.fetchone()
+        
+        if existing_admin:
+            # Un admin existe déjà, le mettre à jour pour avoir islog=1
+            admin_id, current_islog = existing_admin
+            if current_islog != 1:
+                print("Mise à jour de l'Owner admin existant...")
+                cursor.execute("UPDATE owner SET islog = 1 WHERE id = ?", (admin_id,))
+                print(f"✓ Owner admin mis à jour avec ID: {admin_id}")
+            else:
+                print(f"✓ Owner admin existant trouvé avec ID: {admin_id}")
+            return admin_id
+        
+        # Aucun admin existant, en créer un nouveau
         try:
             from datetime import datetime
             current_time = datetime.now().isoformat()
@@ -167,7 +184,26 @@ def ensure_default_owner(cursor):
             return owner_id
         except Exception as e:
             print(f"❌ Erreur création Owner: {str(e)}")
-            return None
+            
+            # Essayer avec un username unique
+            import random
+            unique_username = f"admin_{random.randint(1000, 9999)}"
+            try:
+                cursor.execute("""
+                    INSERT INTO owner 
+                    (username, islog, "group", phone, password, isactive, 
+                     last_login, login_count, is_syncro, last_update_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    unique_username, 1, "administrators", "0000000000", "admin123", 
+                    1, current_time, 0, 0, current_time
+                ))
+                owner_id = cursor.lastrowid
+                print(f"✓ Owner par défaut créé avec username unique '{unique_username}' et ID: {owner_id}")
+                return owner_id
+            except Exception as e2:
+                print(f"❌ Erreur création Owner avec username unique: {str(e2)}")
+                return None
     else:
         owner_id = owner[0]
         print(f"✓ Owner existant trouvé avec ID: {owner_id}")
