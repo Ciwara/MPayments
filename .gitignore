@@ -12,3 +12,5 @@ dist/
 /env
 .DS_Store
 .env/
+database.db-shm
+database.db-wal
