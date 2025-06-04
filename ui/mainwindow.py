@@ -72,9 +72,14 @@ class DatabaseManager:
     @staticmethod
     def close():
         """Ferme la connexion à la base de données"""
-        if not database.is_closed():
-            database.close()
-            logger.debug("Base de données fermée")
+        try:
+            from database import database
+            if database is not None and not database.is_closed():
+                database.close()
+                logger.debug("Base de données fermée")
+        except Exception as e:
+            logger.warning(f"Erreur lors de la fermeture de la base: {e}")
+            # Ne pas lever d'exception ici pour éviter de bloquer la fermeture
 
 
 class ThreadManager:
