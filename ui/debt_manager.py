@@ -4,6 +4,7 @@
 
 import logging
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 
 from Common.ui.common import (Button, FormLabel,
                               FWidget, LineEdit)
@@ -29,6 +30,46 @@ logger = logging.getLogger(__name__)
 
 
 ALL_CONTACTS = "TOUS"
+
+# Fonctions utilitaires pour les calculs précis
+def safe_float(value, default=0.0):
+    """Conversion sécurisée en float avec valeur par défaut"""
+    try:
+        if value is None or value == "":
+            return default
+        return float(str(value).replace(",", ".").replace(" ", "").replace("\xa0", ""))
+    except (ValueError, TypeError):
+        logger.warning(f"Impossible de convertir '{value}' en float, utilisation de {default}")
+        return default
+
+def precise_calculation(amount, precision=2):
+    """Calcul précis avec arrondi correct"""
+    try:
+        decimal_amount = Decimal(str(amount))
+        return float(decimal_amount.quantize(Decimal(f'0.{"0" * precision}'), rounding=ROUND_HALF_UP))
+    except:
+        return round(float(amount), precision)
+
+def calculate_running_balance(payments_data):
+    """Calcule les balances courantes correctement pour une liste de paiements"""
+    calculated_data = []
+    running_balance = 0.0
+    
+    for payment in payments_data:
+        date_val, libelle, debit, credit, stored_balance, payment_id = payment
+        
+        # Utiliser les valeurs réelles de débit/crédit pour recalculer
+        debit_amount = safe_float(debit)
+        credit_amount = safe_float(credit)
+        
+        # Calcul de la balance courante
+        running_balance += credit_amount - debit_amount
+        running_balance = precise_calculation(running_balance)
+        
+        # Remplacer la balance stockée par la balance calculée
+        calculated_data.append((date_val, libelle, debit_amount, credit_amount, running_balance, payment_id))
+    
+    return calculated_data
 
 
 class DebtsViewWidget(FWidget):
@@ -363,14 +404,14 @@ class RapportTableWidget(FTableWidget):
         self.label_mov_tt = "-"
 
     def refresh_(self, provid_clt_id=None, search=None):
-        """ """
-        self.totals_debit = 0
-        self.totals_credit = 0
-        self.balance_tt = 0
-        # self.on_date = date_to_datetime(self.parent.on_date_field.text())
-        # self.end_date = date_to_datetime(self.parent.end_date_field.text())
-
-        # l_date = [self.on_date, self.end_date]
+        """Rafraîchissement avec calculs améliorés"""
+        logger.debug(f"Rafraîchissement des données pour client {provid_clt_id}")
+        
+        # Initialisation des totaux
+        self.totals_debit = 0.0
+        self.totals_credit = 0.0
+        self.balance_tt = 0.0
+        
         self._reset()
         self.set_data_for(provid_clt_id=provid_clt_id, search=search)
         self.refresh()
@@ -381,6 +422,9 @@ class RapportTableWidget(FTableWidget):
         self.hideColumn(len(self.hheaders) - 1)
 
     def set_data_for(self, provid_clt_id=None, search=None):
+        """Récupération et calcul des données avec validation"""
+        logger.debug("Récupération des données de paiement")
+        
         self.provid_clt_id = provid_clt_id
         qs = (
             Payment.select()
@@ -395,25 +439,35 @@ class RapportTableWidget(FTableWidget):
             msg = "<h3>Compte : {}</h3> <h4>Tel: {}</h4>".format(
                 self.provider_clt.name, self.provider_clt.phone
             )
+            logger.debug(f"Filtre sur le client: {self.provider_clt.name}")
         else:
-            # return
+            # Vue globale - tous les clients
             self.provider_clt = "Tous"
-            for prov in ProviderOrClient.select().where(
-                ProviderOrClient.type_ == ProviderOrClient.CLT
-            ):
-                self.remaining += prov.last_remaining()
+            try:
+                for prov in ProviderOrClient.select().where(
+                    ProviderOrClient.type_ == ProviderOrClient.CLT
+                ):
+                    self.remaining += prov.last_remaining()
+            except Exception as e:
+                logger.warning(f"Erreur calcul remaining total: {e}")
+                self.remaining = 0
             msg = self.provider_clt
+        
         self.parent.label_owner.setText(msg)
 
-        self.data = [
+        # Récupération des données brutes
+        raw_data = [
             (pay.date, pay.libelle, pay.debit, pay.credit, pay.balance, pay.id)
             for pay in qs.iterator()
         ]
+        
+        # Recalcul des balances pour cohérence
+        self.data = calculate_running_balance(raw_data)
+        
+        logger.debug(f"Données récupérées: {len(self.data)} enregistrements")
 
     def popup(self, pos):
         from ui.deleteview import DeleteViewWidget
-
-        # from data_helper import check_befor_update_payment
 
         if (len(self.data) - 1) < self.selectionModel().selection().indexes()[0].row():
             return False
@@ -434,28 +488,42 @@ class RapportTableWidget(FTableWidget):
             )
 
     def extend_rows(self):
+        """Calcul des totaux avec précision améliorée"""
+        logger.debug("Calcul des totaux et extension des lignes")
+        
         self.parent.btt_pdf_export.setEnabled(True)
         self.parent.btt_xlsx_export.setEnabled(True)
         nb_rows = self.rowCount()
         self.setRowCount(nb_rows + 1)
         self.setSpan(nb_rows + 2, 2, 2, 4)
-        self.totals_debit = 0
-        self.totals_credit = 0
-        self.balance_tt = 0
-        cp = 0
-        for row_num in range(0, self.data.__len__()):
-            mtt_debit = is_float(str(self.item(row_num, 2).text()))
-            mtt_credit = is_float(str(self.item(row_num, 3).text()))
-            # if cp == 0:
-            # last_balance = is_float(str(self.item(row_num, 4).text()))
-            self.totals_debit += mtt_debit
-            self.totals_credit += mtt_credit
-            cp += 1
-
-        # self.balance_tt = last_balance
-        # if isinstance(self.provid_clt_id, str) or not self.provid_clt_id:
-        #     self.balance_tt = self.totals_debit - self.totals_credit
-        self.balance_tt = self.totals_credit - self.totals_debit
+        
+        # Initialisation des totaux
+        self.totals_debit = 0.0
+        self.totals_credit = 0.0
+        self.balance_tt = 0.0
+        
+        # Calcul des totaux à partir des données calculées
+        for row_data in self.data:
+            date_val, libelle, debit, credit, balance, payment_id = row_data
+            
+            self.totals_debit += safe_float(debit)
+            self.totals_credit += safe_float(credit)
+        
+        # Arrondir les totaux
+        self.totals_debit = precise_calculation(self.totals_debit)
+        self.totals_credit = precise_calculation(self.totals_credit)
+        
+        # Calcul de la balance finale
+        if isinstance(self.provid_clt_id, int) and self.data:
+            # Pour un client spécifique, utiliser la dernière balance calculée
+            self.balance_tt = self.data[-1][4] if self.data else 0.0
+        else:
+            # Pour tous les clients, calculer la différence des totaux
+            self.balance_tt = self.totals_credit - self.totals_debit
+        
+        self.balance_tt = precise_calculation(self.balance_tt)
+        
+        logger.debug(f"Totaux calculés - Débit: {self.totals_debit}, Crédit: {self.totals_credit}, Balance: {self.balance_tt}")
 
         self.label_mov_tt = "Totals mouvements: "
         self.setItem(nb_rows, 1, TotalsWidget(self.label_mov_tt))
@@ -471,7 +539,13 @@ class RapportTableWidget(FTableWidget):
         )
 
     def dict_data(self):
+        """Données d'export avec calculs corrects"""
         title = "Movements"
+        
+        # Déterminer le nom du client pour l'export
+        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
+        client_id = getattr(self.provider_clt, 'id', None) if hasattr(self.provider_clt, 'id') else None
+        
         return {
             "file_name": title,
             "headers": self.hheaders[:-1],
@@ -482,19 +556,18 @@ class RapportTableWidget(FTableWidget):
                 (3, self.totals_credit),
             ],
             "sheet": title,
-            # 'title': self.title,
             "widths": self.stretch_columns,
             "format_money": ["C:C", "D:D", "E:E"],
             "exclude_row": len(self.data) - 1,
             "date": self.parent.now,
             "others": [
-                ("A7", "C7", "Compte : {}".format(self.provider_clt)),
+                ("A7", "C7", "Compte : {}".format(client_name)),
                 (
                     "A8",
                     "B8",
                     "Solde au {}: {}".format(
                         self.parent.now,
-                        device_amount(self.balance_tt, self.provider_clt.id),
+                        device_amount(self.balance_tt, client_id),
                     ),
                 ),
             ],
@@ -527,11 +600,14 @@ class RapportCISSTableWidget(FTableWidget):
         # self.refresh_()
 
     def refresh_(self, provid_clt_id=None, search=None):
-        """ """
+        """Rafraîchissement avec calculs améliorés pour CISS"""
+        logger.debug(f"Rafraîchissement CISS pour client {provid_clt_id}")
 
-        self.totals_debit = 0
-        self.totals_credit = 0
-        self.balance_tt = 0
+        self.totals_debit = 0.0
+        self.totals_credit = 0.0
+        self.totals_weight = 0.0
+        self.balance_tt = 0.0
+        
         self._reset()
         self.set_data_for(provid_clt_id=provid_clt_id, search=search)
         self.refresh()
@@ -542,6 +618,9 @@ class RapportCISSTableWidget(FTableWidget):
         self.hideColumn(len(self.hheaders) - 1)
 
     def set_data_for(self, provid_clt_id=None, search=None):
+        """Récupération des données CISS avec calculs de poids"""
+        logger.debug("Récupération des données CISS")
+        
         self.provid_clt_id = provid_clt_id
         qs = (
             Payment.select()
@@ -558,30 +637,46 @@ class RapportCISSTableWidget(FTableWidget):
             )
         else:
             self.provider_clt = "Tous"
-            for prov in ProviderOrClient.select().where(
-                ProviderOrClient.type_ == ProviderOrClient.CLT
-            ):
-                self.remaining += prov.last_remaining()
+            try:
+                for prov in ProviderOrClient.select().where(
+                    ProviderOrClient.type_ == ProviderOrClient.CLT
+                ):
+                    self.remaining += prov.last_remaining()
+            except Exception as e:
+                logger.warning(f"Erreur calcul remaining CISS: {e}")
+                self.remaining = 0
             msg = self.provider_clt
+        
         self.parent.label_owner.setText(msg)
 
-        self.data = [
-            (
-                pay.date,
-                pay.libelle,
-                pay.weight,
-                pay.debit,
-                pay.credit,
-                pay.balance,
-                pay.id,
-            )
+        # Récupération avec poids et recalcul des balances
+        raw_data = [
+            (pay.date, pay.libelle, pay.weight, pay.debit, pay.credit, pay.balance, pay.id)
             for pay in qs.iterator()
         ]
+        
+        # Adapter le calcul pour inclure les poids
+        self.data = []
+        running_balance = 0.0
+        
+        for payment in raw_data:
+            date_val, libelle, weight, debit, credit, stored_balance, payment_id = payment
+            
+            # Convertir en valeurs sûres
+            weight_amount = safe_float(weight)
+            debit_amount = safe_float(debit)
+            credit_amount = safe_float(credit)
+            
+            # Calcul de la balance courante
+            running_balance += credit_amount - debit_amount
+            running_balance = precise_calculation(running_balance)
+            
+            self.data.append((date_val, libelle, weight_amount, debit_amount, credit_amount, running_balance, payment_id))
+        
+        logger.debug(f"Données CISS récupérées: {len(self.data)} enregistrements")
 
     def popup(self, pos):
         from ui.deleteview import DeleteViewWidget
-
-        # from data_helper import check_befor_update_payment
 
         if (len(self.data) - 1) < self.selectionModel().selection().indexes()[0].row():
             return False
@@ -601,31 +696,45 @@ class RapportCISSTableWidget(FTableWidget):
             )
 
     def extend_rows(self):
+        """Calcul des totaux CISS avec poids"""
+        logger.debug("Calcul des totaux CISS avec poids")
+        
         self.parent.btt_pdf_export.setEnabled(True)
         self.parent.btt_xlsx_export.setEnabled(True)
         nb_rows = self.rowCount()
         self.setRowCount(nb_rows + 1)
         self.setSpan(nb_rows + 2, 2, 2, 4)
-        self.totals_weight = 0
-        self.totals_debit = 0
-        self.totals_credit = 0
-        self.balance_tt = 0
-        cp = 0
-        for row_num in range(0, self.data.__len__()):
-            mtt_weight = is_float(str(self.item(row_num, 2).text()))
-            mtt_debit = is_float(str(self.item(row_num, 3).text()))
-            mtt_credit = is_float(str(self.item(row_num, 4).text()))
-            # if cp == 0:
-            # last_balance = is_float(str(self.item(row_num, 4).text()))
-            self.totals_weight += mtt_weight
-            self.totals_debit += mtt_debit
-            self.totals_credit += mtt_credit
-            cp += 1
-
-        # self.balance_tt = last_balance
-        # if isinstance(self.provid_clt_id, str) or not self.provid_clt_id:
-        #     self.balance_tt = self.totals_debit - self.totals_credit
-        self.balance_tt = self.totals_credit - self.totals_debit
+        
+        # Initialisation des totaux
+        self.totals_weight = 0.0
+        self.totals_debit = 0.0
+        self.totals_credit = 0.0
+        self.balance_tt = 0.0
+        
+        # Calcul des totaux à partir des données
+        for row_data in self.data:
+            date_val, libelle, weight, debit, credit, balance, payment_id = row_data
+            
+            self.totals_weight += safe_float(weight)
+            self.totals_debit += safe_float(debit)
+            self.totals_credit += safe_float(credit)
+        
+        # Arrondir les totaux
+        self.totals_weight = precise_calculation(self.totals_weight, 3)  # 3 décimales pour le poids
+        self.totals_debit = precise_calculation(self.totals_debit)
+        self.totals_credit = precise_calculation(self.totals_credit)
+        
+        # Calcul de la balance finale
+        if isinstance(self.provid_clt_id, int) and self.data:
+            # Pour un client spécifique, utiliser la dernière balance calculée
+            self.balance_tt = self.data[-1][5] if self.data else 0.0
+        else:
+            # Pour tous les clients, calculer la différence des totaux
+            self.balance_tt = self.totals_credit - self.totals_debit
+        
+        self.balance_tt = precise_calculation(self.balance_tt)
+        
+        logger.debug(f"Totaux CISS - Poids: {self.totals_weight}, Débit: {self.totals_debit}, Crédit: {self.totals_credit}, Balance: {self.balance_tt}")
 
         self.label_mov_tt = "Totals mouvements: "
         self.setItem(nb_rows, 1, TotalsWidget(self.label_mov_tt))
@@ -638,31 +747,35 @@ class RapportCISSTableWidget(FTableWidget):
         self.setItem(nb_rows, 4, TotalsWidget(device_amount(self.totals_credit)))
 
     def dict_data(self):
+        """Données d'export CISS avec poids"""
         title = "Movements"
+        
+        # Déterminer le nom du client
+        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
+        
         return {
             "file_name": title,
             "headers": self.hheaders[:-1],
             "data": self.data,
             "extend_rows": [
                 (1, self.label_mov_tt),
-                (2, device_amount(self.totals_weight, dvs="F", aftergam=3)),
+                (2, device_amount(self.totals_weight, dvs="Kg", aftergam=3)),
                 (3, self.totals_debit),
                 (4, self.totals_credit),
             ],
             "sheet": title,
-            # 'title': self.title,
             "widths": self.stretch_columns,
-            "format_money": ["C:C", "D:D", "E:E"],
+            "format_money": ["D:D", "E:E", "F:F"],
             "exclude_row": len(self.data) - 1,
             "date": self.parent.now,
             "others": [
-                ("A5", "C7", "Compte : {}".format(self.provider_clt)),
+                ("A5", "C7", "Compte : {}".format(client_name)),
                 (
                     "A6",
                     "B6",
                     "Solde au {}: {}".format(
                         self.parent.now,
-                        device_amount(self.balance_tt, self.provider_clt),
+                        device_amount(self.balance_tt, getattr(self.provider_clt, 'id', None)),
                     ),
                 ),
             ],
