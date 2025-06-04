@@ -178,10 +178,28 @@ class Payment(BaseModel):
         return self.__unicode__()
 
     def display_name(self):
+        # Vérifier si la date est une string ou un objet datetime
+        if isinstance(self.date, str):
+            # Si c'est une string, la convertir en datetime
+            try:
+                if "/" in self.date:
+                    date_obj = datetime.strptime(self.date, "%d/%m/%Y")
+                elif "-" in self.date:
+                    date_obj = datetime.strptime(self.date, "%Y-%m-%d")
+                else:
+                    date_str = self.date
+            except ValueError:
+                date_str = self.date
+            else:
+                date_str = date_obj.strftime("%x")
+        else:
+            # Si c'est un objet datetime, utiliser strftime normalement
+            date_str = self.date.strftime("%x")
+            
         return "{amount} {action} le {date}.".format(
             amount=device_amount(self.amount(), self.provider_clt),
             action=self.action(),
-            date=self.date.strftime("%x"),
+            date=date_str,
         )
 
     def action(self):
