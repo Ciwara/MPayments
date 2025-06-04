@@ -73,7 +73,6 @@ def fix_all_balances():
         # Valider les modifications
         conn.commit()
         
-        print(f"\n=== RÉSUMÉ ===")
         print(f"✅ {total_corrected} balances corrigées au total")
         print(f"✅ {len(client_ids)} clients traités")
         

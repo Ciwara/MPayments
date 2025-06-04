@@ -6,7 +6,6 @@
 from __future__ import unicode_literals, absolute_import, division, print_function
 
 from datetime import datetime
-import os
 import logging
 
 from peewee import (
@@ -21,7 +20,6 @@ from peewee import (
 )
 from Common.models import BaseModel, FileJoin, Owner
 from data_helper import device_amount
-from configuration import Config
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
@@ -117,7 +115,7 @@ class ProviderOrClient(BaseModel):
                 .order_by(Payment.date.desc())
                 .get()
             )
-        except:
+        except Exception as e:
             return None
 
     def last_remaining(self):

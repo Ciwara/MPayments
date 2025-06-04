@@ -23,8 +23,16 @@ class MenuBar(FMenuBar, FWidget):
         from ui.statistics import StatisticsViewWidget
         from ui.trash_cpt import DebtsTrashViewWidget
         from ui.debt_manager import DebtsViewWidget
+        from ui.dashboard import DashboardWidget
 
         menu = [
+            {
+                "name": "📊 Tableau de Bord",
+                "icon": "state",
+                "admin": False,
+                "shortcut": "Ctrl+D",
+                "goto": DashboardWidget,
+            },
             {
                 "name": "Statistiques",
                 "icon": "state",
@@ -49,7 +57,7 @@ class MenuBar(FMenuBar, FWidget):
         ]
 
         # Menu aller à
-        goto_ = self.addMenu("&Aller a")
+        goto_ = self.addMenu("&Aller à")
 
         for m in menu:
             el_menu = QAction(
@@ -59,16 +67,8 @@ class MenuBar(FMenuBar, FWidget):
             )
             el_menu.setShortcut(m.get("shortcut"))
             el_menu.triggered.connect(lambda checked, m=m: self.goto(m.get("goto")))
-            goto_.addSeparator()
             goto_.addAction(el_menu)
-
-        # if admin:
-        # all report
-        #     all_report = QAction(u"Tous les rapports", self)
-        #     all_report.setShortcut("Ctrl+T")
-        #     self.connect(all_report, SIGNAL("triggered()"),
-        #                                         self.all_report)
-        #     goto_.addAction(all_report)
+            goto_.addSeparator()
 
         # Menu Aide
         help_ = self.addMenu("Aide")
@@ -87,3 +87,7 @@ class MenuBar(FMenuBar, FWidget):
         pass
         # from ui.help import HTMLEditor
         # self.open_dialog(HTMLEditor, modal=True)
+
+    def goto_about(self):
+        from ui.about import AboutDialog
+        self.parent.open_dialog(AboutDialog, modal=True)

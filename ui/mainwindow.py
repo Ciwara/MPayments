@@ -23,7 +23,7 @@ from database import Setup
 
 from ui.menutoolbar import MenuToolBar
 from ui.menubar import MenuBar
-from ui.debt_manager import DebtsViewWidget
+from ui.dashboard import DashboardWidget
 
 # Configuration du logger
 logging.basicConfig(
@@ -170,8 +170,8 @@ class MainWindow(FMainWindow):
             }
             self.addToolBar(ptn.get(self.settings.toolbar_position), self.toolbar)
 
-        self.page = DebtsViewWidget
-        logger.debug("Changement de contexte vers DebtsViewWidget")
+        self.page = DashboardWidget
+        logger.debug("Changement de contexte vers DashboardWidget")
         self.change_context(self.page)
 
         # Initialisation du gestionnaire de threads

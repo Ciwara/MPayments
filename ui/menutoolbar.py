@@ -18,8 +18,16 @@ class MenuToolBar(FMenuToolBar, FWidget):
         from ui.statistics import StatisticsViewWidget
         from ui.trash_cpt import DebtsTrashViewWidget
         from ui.debt_manager import DebtsViewWidget
+        from ui.dashboard import DashboardWidget
 
         menu = [
+            {
+                "name": "📊 Tableau de Bord",
+                "icon": "state",
+                "admin": False,
+                "shortcut": "Ctrl+D",
+                "goto": DashboardWidget,
+            },
             {
                 "name": "Statistiques",
                 "icon": "state",
