@@ -3,6 +3,8 @@
 # maintainer: Fad
 from __future__ import unicode_literals, absolute_import, division, print_function
 
+import logging
+
 # import os
 
 from PyQt5.QtCore import QDate
@@ -15,6 +17,14 @@ from Common.ui.common import FWidget, ButtonSave, FormLabel, FloatLineEdit, Form
 
 from models import Payment
 
+# Configuration du logger
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 
 try:
     unicode
@@ -24,15 +34,23 @@ except:
 
 class EditOrAddPaymentrDialog(QDialog, FWidget):
     def __init__(self, table_p, parent, type_=None, payment=None, *args, **kwargs):
+        logger.debug("Initialisation du dialogue de paiement")
         QDialog.__init__(self, parent, *args, **kwargs)
 
+        # Optimisation de la taille de la fenêtre
+        self.setFixedWidth(400)
+        
         self.type_ = type_
         self.payment = payment
         self.parent = parent
         self.table_p = table_p
 
+        # Mise en cache des valeurs
+        self._cached_values = {}
+        
         weight = ""
         if self.payment:
+            logger.debug("Mode édition d'un paiement existant")
             self.new = False
             self.type_ = payment.type_
             self.payment_date_field = FormatDate(self.payment.date)
@@ -48,6 +66,7 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
                 amount = payment.debit
                 weight = self.payment.weight
         else:
+            logger.debug("Mode création d'un nouveau paiement")
             self.new = True
             self.payment = Payment()
             amount = ""
@@ -56,14 +75,24 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
             self.title = "Création d'un nouvel client"
 
         self.setWindowTitle(self.title)
+        logger.debug(f"Titre du dialogue: {self.title}")
 
-        self.payment_weight_field = FloatLineEdit(unicode(weight).replace(".", ","))
-        self.amount_field = FloatLineEdit(unicode(amount).replace(".", ","))
+        # Optimisation des champs de saisie
+        self.payment_weight_field = FloatLineEdit(str(weight).replace(".", ","))
+        self.payment_weight_field.setFixedHeight(30)
+        
+        self.amount_field = FloatLineEdit(str(amount).replace(".", ","))
+        self.amount_field.setFixedHeight(30)
+        
         self.libelle_field = QTextEdit(self.payment.libelle)
+        self.libelle_field.setFixedHeight(60)
+        logger.debug("Champs de saisie initialisés")
 
         vbox = QVBoxLayout()
+        vbox.setSpacing(10)  # Réduire l'espacement
 
         formbox = QFormLayout()
+        formbox.setSpacing(10)  # Réduire l'espacement
         formbox.addRow(FormLabel("Date : *"), self.payment_date_field)
         formbox.addRow(FormLabel("Montant : *"), self.amount_field)
         if self.type_ == Payment.DEBIT and Config.CISS:
@@ -71,35 +100,47 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
         formbox.addRow(FormLabel("Libelle :"), self.libelle_field)
 
         butt = ButtonSave("Enregistrer")
+        butt.setFixedHeight(30)
         butt.clicked.connect(self.save_edit)
         formbox.addRow("", butt)
+        logger.debug("Formulaire configuré")
 
         vbox.addLayout(formbox)
         self.setLayout(vbox)
 
     def save_edit(self):
-        """add operation"""
-        # print("saving")
+        """add operation avec validation optimisée"""
+        logger.debug("Début de la sauvegarde du paiement")
+        
+        # Validation des champs
         if check_is_empty(self.amount_field):
+            logger.warning("Le champ montant est vide")
             return
-        self.pro_clt_id = self.table_p.provid_clt_id
-        payment_date = unicode(self.payment_date_field.text())
-        libelle = unicode(self.libelle_field.toPlainText())
-        amount = float(
-            unicode(
-                self.amount_field.text()
-                .replace(",", ".")
-                .replace(" ", "")
-                .replace("\xa0", "")
-            )
-        )
 
+        # Récupération et nettoyage des données
+        self.pro_clt_id = self.table_p.provid_clt_id
+        payment_date = str(self.payment_date_field.text())
+        libelle = str(self.libelle_field.toPlainText()).strip()
+        
+        # Optimisation du traitement du montant
+        amount_text = self.amount_field.text().replace(",", ".").replace(" ", "").replace("\xa0", "")
+        try:
+            amount = float(amount_text)
+        except ValueError:
+            logger.error("Format de montant invalide")
+            return
+            
+        logger.debug(f"Données saisies - Date: {payment_date}, Libellé: {libelle}, Montant: {amount}")
+
+        # Mise à jour du paiement
         payment = self.payment
         payment.type_ = self.type_
         payment.libelle = libelle
+        
         if self.new:
             payment.date = date_to_datetime(payment_date)
             payment.provider_clt = self.table_p.provider_clt
+            
         if self.type_ == Payment.CREDIT:
             payment.credit = amount
         elif self.type_ == Payment.DEBIT:
@@ -107,20 +148,22 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
 
             if Config.CISS:
                 if check_is_empty(self.payment_weight_field):
+                    logger.warning("Le champ poids est vide")
                     return
-                payment.weight = (
-                    float(
-                        unicode(
-                            self.payment_weight_field.text()
-                            .replace(",", ".")
-                            .replace(" ", "")
-                            .replace("\xa0", "")
-                        )
-                    )
-                    or 0
-                )
+                    
+                # Optimisation du traitement du poids
+                weight_text = self.payment_weight_field.text().replace(",", ".").replace(" ", "").replace("\xa0", "")
+                try:
+                    payment.weight = float(weight_text) or 0
+                except ValueError:
+                    logger.error("Format de poids invalide")
+                    return
+                    
+                logger.debug(f"Poids saisi: {payment.weight}")
+
         try:
             payment.save()
+            logger.debug("Paiement sauvegardé avec succès")
             self.close()
             self.parent.Notify(
                 "le {type} {lib} à été enregistré avec succès".format(
@@ -130,5 +173,5 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
             )
             self.table_p.refresh_(provid_clt_id=self.pro_clt_id)
         except Exception as e:
-            print("SAVE Payment : ", e)
+            logger.error(f"Erreur lors de la sauvegarde du paiement: {str(e)}")
             self.parent.Notify(e, "error")

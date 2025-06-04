@@ -1,5 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# maintainer: Fad
 
 import logging
+
+from .mainwindow import MainWindow
+from .debt_manager import DebtsViewWidget
+from .menubar import MenuBar
+from .menutoolbar import MenuToolBar
+
+__all__ = ['MainWindow', 'DebtsViewWidget', 'MenuBar', 'MenuToolBar']
 
 # Configuration du logger
 logging.basicConfig(

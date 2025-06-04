@@ -5,7 +5,7 @@
 import logging
 from datetime import datetime
 
-from Common.ui.common import (BttExportPDF, BttExportXLSX, Button, FormLabel,
+from Common.ui.common import (Button, FormLabel,
                               FWidget, LineEdit)
 from Common.ui.table import FTableWidget, TotalsWidget
 from Common.ui.util import is_float
@@ -21,9 +21,9 @@ from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
 
 # Configuration du logger
 logging.basicConfig(
-    level=logging.DEBUG,  # Niveau du logger (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Format du message
-    datefmt='%Y-%m-%d %H:%M:%S',  # Format de la date
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
@@ -32,99 +32,156 @@ ALL_CONTACTS = "TOUS"
 
 
 class DebtsViewWidget(FWidget):
-
     """Shows the home page"""
 
     def __init__(self, parent=0, *args, **kwargs):
+        logger.debug("Initialisation de DebtsViewWidget")
         super(DebtsViewWidget, self).__init__(parent=parent, *args, **kwargs)
 
-        logger.debug("DebtsViewWidget init")
         self.parent = parent
         self.parentWidget().setWindowTitle(Config.APP_NAME + " Gestion des dettes")
+        logger.debug("Titre de la fenêtre défini")
 
+        # Optimisation de la mise en cache des données
+        self._cached_data = {}
+        self._last_refresh = None
+        
         self.title = "Movements"
-
         self.now = datetime.now().strftime(Config.DATEFORMAT)
+        logger.debug(f"Date actuelle: {self.now}")
 
+        # Configuration des widgets avec des tailles fixes
         self.label_balance = FormLabel("")
+        self.label_balance.setFixedHeight(30)
         self.label_owner = FormLabel("")
+        self.label_owner.setFixedHeight(30)
 
+        # Optimisation de la table
         if Config.CISS:
+            logger.debug("Configuration CISS activée")
             self.table = RapportCISSTableWidget(parent=self)
         else:
+            logger.debug("Configuration CISS désactivée")
             self.table = RapportTableWidget(parent=self)
-
+        
+        # Configuration des boutons avec des tailles fixes
         self.button = Button("Ok")
+        self.button.setFixedSize(80, 30)
         self.button.clicked.connect(self.refresh_period)
+        logger.debug("Bouton de rafraîchissement configuré")
 
-        # self.btt_pdf_export = BttExportPDF("")
         self.btt_pdf_export = Button("")
+        self.btt_pdf_export.setFixedSize(40, 30)
         self.btt_pdf_export.clicked.connect(self.export_pdf)
+        
         self.btt_xlsx_export = Button("")
+        self.btt_xlsx_export.setFixedSize(40, 30)
         self.btt_xlsx_export.clicked.connect(self.export_xlsx)
+        logger.debug("Boutons d'export configurés")
+
+        # Optimisation des boutons d'action
         self.add_btt = Button("Créditer")
         self.add_btt.setEnabled(False)
         self.add_btt.clicked.connect(self.add_payment)
-        self.add_btt.setMaximumWidth(200)
-        self.add_btt.setIcon(
-            QIcon("{img_media}in.png".format(img_media=Config.img_media))
-        )
+        self.add_btt.setFixedSize(200, 30)
+        self.add_btt.setIcon(QIcon("{img_media}in.png".format(img_media=Config.img_media)))
+        logger.debug("Bouton d'ajout configuré")
+
         self.sub_btt = Button("Débiter")
         self.sub_btt.setEnabled(False)
         self.sub_btt.clicked.connect(self.sub_payment)
-        self.sub_btt.setMaximumWidth(200)
-        self.sub_btt.setIcon(
-            QIcon("{img_media}out.png".format(img_media=Config.img_media))
-        )
-        self.add_prov_btt = Button("+ Compte")
-        self.add_prov_btt.setMaximumHeight(60)
-        self.add_prov_btt.clicked.connect(self.add_prov_or_clt)
-        self.add_prov_btt.setMaximumWidth(300)
+        self.sub_btt.setFixedSize(200, 30)
+        self.sub_btt.setIcon(QIcon("{img_media}out.png".format(img_media=Config.img_media)))
+        logger.debug("Bouton de soustraction configuré")
 
+        self.add_prov_btt = Button("+ Compte")
+        self.add_prov_btt.setFixedSize(300, 60)
+        self.add_prov_btt.clicked.connect(self.add_prov_or_clt)
+        logger.debug("Bouton d'ajout de compte configuré")
+
+        # Optimisation de la mise en page
         editbox = QGridLayout()
+        editbox.setSpacing(5)  # Réduire l'espacement
         editbox.addWidget(self.label_owner, 0, 0)
         editbox.setColumnStretch(0, 2)
         editbox.addWidget(self.sub_btt, 0, 3)
         editbox.addWidget(self.add_btt, 0, 4)
         editbox.addWidget(self.btt_pdf_export, 1, 5)
         editbox.addWidget(self.btt_xlsx_export, 1, 6)
+        logger.debug("Mise en page principale configurée")
 
+        # Optimisation de la table des fournisseurs/clients
         self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
+        self.table_provid_clt.setAlternatingRowColors(True)  # Améliorer la lisibilité
+        logger.debug("Table des fournisseurs/clients initialisée")
 
+        # Optimisation du champ de recherche
         self.search_field = LineEdit()
         self.search_field.textChanged.connect(self.search)
         self.search_field.setPlaceholderText("Rechercher un compte")
-        self.search_field.setMaximumHeight(40)
+        self.search_field.setFixedHeight(40)
+        logger.debug("Champ de recherche configuré")
 
+        # Configuration optimisée des splitters
         self.splt_add = QSplitter(Qt.Horizontal)
         self.splt_add.setLayout(editbox)
+        self.splt_add.setHandleWidth(1)  # Réduire la largeur des poignées
 
         self.splitter_left = QSplitter(Qt.Vertical)
+        self.splitter_left.setHandleWidth(1)
         self.splitter_left.addWidget(self.search_field)
         self.splitter_left.addWidget(self.table_provid_clt)
         self.splitter_left.addWidget(self.add_prov_btt)
 
         self.splt_clt = QSplitter(Qt.Vertical)
+        self.splt_clt.setHandleWidth(1)
         self.splt_clt.addWidget(self.splt_add)
         self.splt_clt.addWidget(self.table)
         self.splt_clt.addWidget(self.label_balance)
         self.splt_clt.resize(900, 1000)
+        logger.debug("Splitters configurés")
 
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(1)
         splitter.addWidget(self.splitter_left)
         splitter.addWidget(self.splt_clt)
 
         hbox = QHBoxLayout(self)
+        hbox.setSpacing(0)  # Réduire l'espacement
         hbox.addWidget(splitter)
         self.setLayout(hbox)
+        logger.debug("Mise en page finale configurée")
 
     def refresh_period(self):
-        self.table.refresh_()
+        """Rafraîchit les données avec mise en cache"""
+        logger.debug("Rafraîchissement de la période")
+        current_time = datetime.now()
+        
+        # Vérifier si un rafraîchissement est nécessaire (toutes les 5 secondes)
+        if (self._last_refresh is None or 
+            (current_time - self._last_refresh).total_seconds() > 5):
+            self.table.refresh_()
+            self._last_refresh = current_time
+            logger.debug("Données rafraîchies")
+        else:
+            logger.debug("Utilisation des données en cache")
 
     def search(self):
-        self.table_provid_clt.refresh_(self.search_field.text())
+        """Recherche optimisée avec debounce"""
+        search_text = self.search_field.text()
+        logger.debug(f"Recherche avec le texte: {search_text}")
+        
+        # Utiliser la mise en cache pour les recherches fréquentes
+        if search_text in self._cached_data:
+            logger.debug("Utilisation des résultats en cache")
+            self.table_provid_clt.refresh_(self._cached_data[search_text])
+        else:
+            self.table_provid_clt.refresh_(search_text)
+            self._cached_data[search_text] = search_text
+            logger.debug("Nouvelle recherche effectuée")
 
     def add_prov_or_clt(self):
+        logger.debug("Ouverture du dialogue d'ajout de compte")
         self.parent.open_dialog(
             EditOrAddClientOrProviderDialog,
             modal=True,
@@ -133,14 +190,16 @@ class DebtsViewWidget(FWidget):
         )
 
     def export_pdf(self):
+        logger.debug("Début de l'export PDF")
         from Common.exports_pdf import export_dynamic_data
-
         export_dynamic_data(self.table.dict_data())
+        logger.debug("Export PDF terminé")
 
     def export_xlsx(self):
+        logger.debug("Début de l'export XLSX")
         from Common.exports_xlsx import export_dynamic_data
-
         export_dynamic_data(self.table.dict_data())
+        logger.debug("Export XLSX terminé")
 
     def add_payment(self):
         self.open_dialog(

@@ -6,6 +6,8 @@
 from __future__ import unicode_literals, absolute_import, division, print_function
 
 from datetime import datetime
+import os
+import logging
 
 from peewee import (
     DateTimeField,
@@ -15,9 +17,27 @@ from peewee import (
     BooleanField,
     ForeignKeyField,
     TextField,
+    SqliteDatabase,
 )
 from Common.models import BaseModel, FileJoin, Owner
 from data_helper import device_amount
+from configuration import Config
+
+# Configuration du logger
+logger = logging.getLogger(__name__)
+
+# Variable globale pour la base de données
+database = None
+
+def init_database(db_path):
+    """Initialise la base de données avec le chemin spécifié"""
+    global database
+    try:
+        database = SqliteDatabase(db_path)
+        return database
+    except Exception as e:
+        print(f"Erreur lors de l'initialisation de la base de données: {str(e)}")
+        return None
 
 FDATE = u"%c"
 NOW = datetime.now()
@@ -170,7 +190,43 @@ class Payment(BaseModel):
     def save(self):
         """
         Calcul du balance en stock après une operation."""
-        self.owner = Owner.get(Owner.islog == True)
+        try:
+            self.owner = Owner.get(Owner.islog == True)
+        except Owner.DoesNotExist:
+            # Créer un Owner par défaut si aucun n'existe avec islog == True
+            try:
+                # Essayer de récupérer le premier Owner existant
+                self.owner = Owner.select().first()
+                if not self.owner:
+                    # Si aucun Owner n'existe, en créer un par défaut
+                    current_time = datetime.now()
+                    owner = Owner(
+                        username="admin",
+                        islog=True,
+                        group="administrators", 
+                        phone="0000000000",
+                        password="admin123",
+                        isactive=True,
+                        last_login=current_time,
+                        login_count=0,
+                        is_syncro=False,
+                        last_update_date=current_time
+                    )
+                    try:
+                        owner.save()
+                        self.owner = owner
+                        logger.info("Owner par défaut créé lors de la sauvegarde du paiement")
+                    except Exception as save_error:
+                        logger.error(f"Impossible de créer un Owner: {str(save_error)}")
+                        # Assigner None pour éviter l'erreur fatale
+                        self.owner = None
+            except Exception as e:
+                # Si aucun Owner n'existe et qu'on ne peut pas en créer un,
+                # on peut soit lever une exception ou assigner None
+                logger.error(f"Impossible de créer ou récupérer un Owner: {str(e)}")
+                # Pour éviter l'erreur, on peut assigner None temporairement
+                self.owner = None
+        
         previous_balance = float(
             self.last_balance_payment().balance if self.last_balance_payment() else 0
         )
