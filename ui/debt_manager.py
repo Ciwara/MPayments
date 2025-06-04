@@ -16,7 +16,7 @@ from models import Payment, ProviderOrClient
 from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtWidgets import (QGridLayout, QHBoxLayout, QListWidget,
-                             QListWidgetItem, QMenu, QSplitter)
+                             QListWidgetItem, QMenu, QSplitter, QFrame, QVBoxLayout, QLabel)
 from ui.payment_edit_add import EditOrAddPaymentrDialog
 from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
 
@@ -28,6 +28,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Palette de couleurs moderne (cohérente avec dashboard et statistics)
+COLORS = {
+    'primary': '#1976D2',
+    'primary_light': '#42A5F5',
+    'primary_dark': '#0D47A1',
+    'secondary': '#FF5722',
+    'secondary_light': '#FF8A65',
+    'success': '#4CAF50',
+    'success_light': '#81C784',
+    'warning': '#FF9800',
+    'warning_light': '#FFB74D',
+    'error': '#F44336',
+    'error_light': '#E57373',
+    'info': '#2196F3',
+    'info_light': '#64B5F6',
+    'background': '#F8F9FA',
+    'surface': '#FFFFFF',
+    'surface_variant': '#F5F5F5',
+    'text_primary': '#212121',
+    'text_secondary': '#757575',
+    'border': '#E0E0E0',
+    'shadow': 'rgba(0, 0, 0, 0.1)'
+}
 
 ALL_CONTACTS = "TOUS"
 
@@ -76,12 +99,20 @@ class DebtsViewWidget(FWidget):
     """Shows the home page"""
 
     def __init__(self, parent=0, *args, **kwargs):
-        logger.debug("Initialisation de DebtsViewWidget")
+        logger.debug("Initialisation de DebtsViewWidget avec design moderne")
         super(DebtsViewWidget, self).__init__(parent=parent, *args, **kwargs)
 
         self.parent = parent
         self.parentWidget().setWindowTitle(Config.APP_NAME + " Gestion des dettes")
         logger.debug("Titre de la fenêtre défini")
+
+        # Style moderne pour le widget principal - SIMPLIFIÉ
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLORS['background']};
+                font-family: "Segoe UI", "Arial", sans-serif;
+            }}
+        """)
 
         # Optimisation de la mise en cache des données
         self._cached_data = {}
@@ -91,13 +122,37 @@ class DebtsViewWidget(FWidget):
         self.now = datetime.now().strftime(Config.DATEFORMAT)
         logger.debug(f"Date actuelle: {self.now}")
 
-        # Configuration des widgets avec des tailles fixes
-        self.label_balance = FormLabel("")
-        self.label_balance.setFixedHeight(30)
-        self.label_owner = FormLabel("")
-        self.label_owner.setFixedHeight(30)
+        # Configuration moderne des labels - SIMPLIFIÉ
+        self.label_balance = QLabel("")
+        self.label_balance.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.label_balance.setStyleSheet(f"""
+            QLabel {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border-radius: 12px;
+                padding: 16px 24px;
+                margin: 8px 0;
+                font-weight: bold;
+            }}
+        """)
+        self.label_balance.setFixedHeight(60)
+        
+        self.label_owner = QLabel("")
+        self.label_owner.setFont(QFont("Segoe UI", 12, QFont.DemiBold))
+        self.label_owner.setStyleSheet(f"""
+            QLabel {{
+                background-color: {COLORS['surface']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 12px 16px;
+                margin: 4px 0;
+                font-weight: bold;
+            }}
+        """)
+        self.label_owner.setFixedHeight(50)
 
-        # Optimisation de la table
+        # Configuration optimisée de la table avec style moderne
         if Config.CISS:
             logger.debug("Configuration CISS activée")
             self.table = RapportCISSTableWidget(parent=self)
@@ -105,93 +160,350 @@ class DebtsViewWidget(FWidget):
             logger.debug("Configuration CISS désactivée")
             self.table = RapportTableWidget(parent=self)
         
-        # Configuration des boutons avec des tailles fixes
-        self.button = Button("Ok")
-        self.button.setFixedSize(80, 30)
-        self.button.clicked.connect(self.refresh_period)
-        logger.debug("Bouton de rafraîchissement configuré")
-
-        self.btt_pdf_export = Button("")
-        self.btt_pdf_export.setFixedSize(40, 30)
-        self.btt_pdf_export.clicked.connect(self.export_pdf)
-        
-        self.btt_xlsx_export = Button("")
-        self.btt_xlsx_export.setFixedSize(40, 30)
-        self.btt_xlsx_export.clicked.connect(self.export_xlsx)
-        logger.debug("Boutons d'export configurés")
-
-        # Optimisation des boutons d'action
-        self.add_btt = Button("Créditer")
-        self.add_btt.setEnabled(False)
-        self.add_btt.clicked.connect(self.add_payment)
-        self.add_btt.setFixedSize(200, 30)
-        self.add_btt.setIcon(QIcon("{img_media}in.png".format(img_media=Config.img_media)))
-        logger.debug("Bouton d'ajout configuré")
-
-        self.sub_btt = Button("Débiter")
-        self.sub_btt.setEnabled(False)
-        self.sub_btt.clicked.connect(self.sub_payment)
-        self.sub_btt.setFixedSize(200, 30)
-        self.sub_btt.setIcon(QIcon("{img_media}out.png".format(img_media=Config.img_media)))
-        logger.debug("Bouton de soustraction configuré")
-
-        self.add_prov_btt = Button("+ Compte")
-        self.add_prov_btt.setFixedSize(300, 60)
-        self.add_prov_btt.clicked.connect(self.add_prov_or_clt)
-        logger.debug("Bouton d'ajout de compte configuré")
-
-        # Optimisation de la mise en page
-        editbox = QGridLayout()
-        editbox.setSpacing(5)  # Réduire l'espacement
-        editbox.addWidget(self.label_owner, 0, 0)
-        editbox.setColumnStretch(0, 2)
-        editbox.addWidget(self.sub_btt, 0, 3)
-        editbox.addWidget(self.add_btt, 0, 4)
-        editbox.addWidget(self.btt_pdf_export, 1, 5)
-        editbox.addWidget(self.btt_xlsx_export, 1, 6)
-        logger.debug("Mise en page principale configurée")
-
-        # Optimisation de la table des fournisseurs/clients
+        # Table des fournisseurs/clients avec style moderne  
         self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
-        self.table_provid_clt.setAlternatingRowColors(True)  # Améliorer la lisibilité
-        logger.debug("Table des fournisseurs/clients initialisée")
+        self.table_provid_clt.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {COLORS['surface']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 12px;
+                padding: 8px;
+                font-family: "Segoe UI";
+                font-size: 11px;
+                alternate-background-color: {COLORS['surface_variant']};
+            }}
+            QListWidget::item {{
+                padding: 8px 12px;
+                border-bottom: 1px solid {COLORS['surface_variant']};
+                border-radius: 6px;
+                margin: 2px 0;
+            }}
+            QListWidget::item:selected {{
+                background-color: {COLORS['primary_light']};
+                color: white;
+            }}
+            QListWidget::item:hover {{
+                background-color: {COLORS['surface_variant']};
+            }}
+        """)
+        logger.debug("Table des fournisseurs/clients initialisée avec style moderne")
 
-        # Optimisation du champ de recherche
+        # Champ de recherche moderne - SIMPLIFIÉ
         self.search_field = LineEdit()
         self.search_field.textChanged.connect(self.search)
-        self.search_field.setPlaceholderText("Rechercher un compte")
-        self.search_field.setFixedHeight(40)
-        logger.debug("Champ de recherche configuré")
+        self.search_field.setPlaceholderText("🔍 Rechercher un compte...")
+        self.search_field.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLORS['surface']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 12px;
+                padding: 12px 16px;
+                font-size: 12px;
+                color: {COLORS['text_primary']};
+                font-weight: normal;
+            }}
+            QLineEdit:focus {{
+                border-color: {COLORS['primary']};
+            }}
+        """)
+        self.search_field.setFixedHeight(45)
+        logger.debug("Champ de recherche configuré avec style moderne")
 
-        # Configuration optimisée des splitters
-        self.splt_add = QSplitter(Qt.Horizontal)
-        self.splt_add.setLayout(editbox)
-        self.splt_add.setHandleWidth(1)  # Réduire la largeur des poignées
+        # Configuration optimisée des boutons d'action - SIMPLIFIÉ
+        self.add_btt = Button("💰 Créditer")
+        self.add_btt.setEnabled(False)
+        self.add_btt.clicked.connect(self.add_payment)
+        self.add_btt.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['success']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: bold;
+                font-size: 12px;
+                min-width: 180px;
+                min-height: 40px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['success_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['success']};
+            }}
+            QPushButton:disabled {{
+                background-color: {COLORS['border']};
+                color: {COLORS['text_secondary']};
+            }}
+        """)
+        logger.debug("Bouton d'ajout configuré avec style moderne")
 
-        self.splitter_left = QSplitter(Qt.Vertical)
-        self.splitter_left.setHandleWidth(1)
-        self.splitter_left.addWidget(self.search_field)
-        self.splitter_left.addWidget(self.table_provid_clt)
-        self.splitter_left.addWidget(self.add_prov_btt)
+        self.sub_btt = Button("💸 Débiter")
+        self.sub_btt.setEnabled(False)
+        self.sub_btt.clicked.connect(self.sub_payment)
+        self.sub_btt.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['error']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: bold;
+                font-size: 12px;
+                min-width: 180px;
+                min-height: 40px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['error_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['error']};
+            }}
+            QPushButton:disabled {{
+                background-color: {COLORS['border']};
+                color: {COLORS['text_secondary']};
+            }}
+        """)
+        logger.debug("Bouton de soustraction configuré avec style moderne")
 
-        self.splt_clt = QSplitter(Qt.Vertical)
-        self.splt_clt.setHandleWidth(1)
-        self.splt_clt.addWidget(self.splt_add)
-        self.splt_clt.addWidget(self.table)
-        self.splt_clt.addWidget(self.label_balance)
-        self.splt_clt.resize(900, 1000)
-        logger.debug("Splitters configurés")
+        self.add_prov_btt = Button("➕ Nouveau Compte")
+        self.add_prov_btt.clicked.connect(self.add_prov_or_clt)
+        self.add_prov_btt.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 16px 24px;
+                font-weight: bold;
+                font-size: 13px;
+                min-width: 280px;
+                min-height: 50px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['primary_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['primary_dark']};
+            }}
+        """)
+        logger.debug("Bouton d'ajout de compte configuré avec style moderne")
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(1)
-        splitter.addWidget(self.splitter_left)
-        splitter.addWidget(self.splt_clt)
+        # Boutons d'export modernes - SIMPLIFIÉ
+        self.button = Button("🔄")
+        self.button.clicked.connect(self.refresh_period)
+        self.button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['info']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-weight: bold;
+                font-size: 11px;
+                min-width: 40px;
+                min-height: 35px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['info_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['info']};
+            }}
+        """)
 
-        hbox = QHBoxLayout(self)
-        hbox.setSpacing(0)  # Réduire l'espacement
-        hbox.addWidget(splitter)
-        self.setLayout(hbox)
-        logger.debug("Mise en page finale configurée")
+        self.btt_pdf_export = Button("📄")
+        self.btt_pdf_export.clicked.connect(self.export_pdf)
+        self.btt_pdf_export.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['error']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-weight: bold;
+                font-size: 11px;
+                min-width: 40px;
+                min-height: 35px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['error_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['error']};
+            }}
+        """)
+        
+        self.btt_xlsx_export = Button("📊")
+        self.btt_xlsx_export.clicked.connect(self.export_xlsx)
+        self.btt_xlsx_export.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['success']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-weight: bold;
+                font-size: 11px;
+                min-width: 40px;
+                min-height: 35px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['success_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['success']};
+            }}
+        """)
+        logger.debug("Boutons d'export configurés avec style moderne")
+
+        # Conteneurs modernes pour l'organisation - SIMPLIFIÉ
+        # Conteneur de gauche avec titre
+        left_container = QFrame()
+        left_container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLORS['surface']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 16px;
+                padding: 16px;
+                margin: 8px;
+            }}
+        """)
+        
+        left_title = QLabel("👥 Comptes Clients")
+        left_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        left_title.setStyleSheet(f"""
+            QLabel {{
+                color: {COLORS['text_primary']};
+                margin-bottom: 12px;
+                font-weight: bold;
+                border: none;
+                background: transparent;
+            }}
+        """)
+        
+        left_layout = QVBoxLayout()
+        left_layout.setSpacing(12)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addWidget(left_title)
+        left_layout.addWidget(self.search_field)
+        left_layout.addWidget(self.table_provid_clt)
+        left_layout.addWidget(self.add_prov_btt)
+        left_container.setLayout(left_layout)
+
+        # Conteneur de droite avec titre
+        right_container = QFrame()
+        right_container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLORS['surface']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 16px;
+                padding: 16px;
+                margin: 8px;
+            }}
+        """)
+        
+        right_title = QLabel("💳 Gestion des Mouvements")
+        right_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        right_title.setStyleSheet(f"""
+            QLabel {{
+                color: {COLORS['text_primary']};
+                margin-bottom: 12px;
+                font-weight: bold;
+                border: none;
+                background: transparent;
+            }}
+        """)
+
+        # Zone de contrôles modernes
+        controls_container = QFrame()
+        controls_container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLORS['surface_variant']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 12px;
+                padding: 16px;
+                margin: 8px 0;
+            }}
+        """)
+        
+        controls_layout = QGridLayout()
+        controls_layout.setSpacing(12)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Première ligne - Info client
+        controls_layout.addWidget(self.label_owner, 0, 0, 1, 5)
+        
+        # Deuxième ligne - Boutons d'action
+        controls_layout.addWidget(self.sub_btt, 1, 0)
+        controls_layout.addWidget(self.add_btt, 1, 1)
+        controls_layout.addWidget(self.button, 1, 2)
+        controls_layout.addWidget(self.btt_pdf_export, 1, 3)
+        controls_layout.addWidget(self.btt_xlsx_export, 1, 4)
+        
+        # Espacement flexible
+        controls_layout.setColumnStretch(5, 1)
+        controls_container.setLayout(controls_layout)
+
+        # Table des mouvements dans un conteneur
+        table_container = QFrame()
+        table_container.setStyleSheet(f"""
+            QFrame {{
+                background-color: transparent;
+                border: none;
+                border-radius: 12px;
+                padding: 0;
+                margin: 8px 0;
+            }}
+        """)
+        table_layout = QVBoxLayout()
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        table_layout.addWidget(self.table)
+        table_container.setLayout(table_layout)
+
+        # Balance dans un conteneur centré
+        balance_container = QFrame()
+        balance_container.setStyleSheet("QFrame { background-color: transparent; border: none; }")
+        balance_layout = QHBoxLayout()
+        balance_layout.addStretch()
+        balance_layout.addWidget(self.label_balance)
+        balance_layout.addStretch()
+        balance_container.setLayout(balance_layout)
+
+        # Layout principal du conteneur de droite
+        right_layout = QVBoxLayout()
+        right_layout.setSpacing(16)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.addWidget(right_title)
+        right_layout.addWidget(controls_container)
+        right_layout.addWidget(table_container)
+        right_layout.addWidget(balance_container)
+        right_container.setLayout(right_layout)
+
+        # Splitter principal moderne - SIMPLIFIÉ
+        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter.setHandleWidth(3)
+        main_splitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background-color: {COLORS['border']};
+                border-radius: 1px;
+            }}
+            QSplitter::handle:hover {{
+                background-color: {COLORS['primary_light']};
+            }}
+        """)
+        main_splitter.addWidget(left_container)
+        main_splitter.addWidget(right_container)
+        main_splitter.setSizes([350, 850])  # Proportion initiale
+
+        # Layout principal
+        main_layout = QHBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.addWidget(main_splitter)
+        self.setLayout(main_layout)
+        
+        logger.debug("DebtsViewWidget initialisé avec succès - Design moderne appliqué")
 
     def refresh_period(self):
         """Rafraîchit les données avec mise en cache"""
@@ -261,10 +573,16 @@ class DebtsViewWidget(FWidget):
         )
 
     def display_balance(self, amount_text):
-        return """ <h2>Solde du {} = <b>{}</b></h2>
-               """.format(
-            self.now, amount_text
-        )
+        return f"""
+        <div style="text-align: center;">
+            <h3 style="margin: 0; color: white; font-weight: 700; font-family: 'Segoe UI';">
+                💰 Solde du {self.now}
+            </h3>
+            <h2 style="margin: 8px 0 0 0; color: white; font-weight: 700; font-size: 18px; font-family: 'Segoe UI';">
+                {amount_text}
+            </h2>
+        </div>
+        """
 
 
 class ProviderOrClientTableWidget(QListWidget):
@@ -389,7 +707,50 @@ class RapportTableWidget(FTableWidget):
     def __init__(self, parent, *args, **kwargs):
         FTableWidget.__init__(self, parent=parent, *args, **kwargs)
 
-        self.hheaders = ["Date", "Libelle opération", "Débit", "Crédit", "Solde", ""]
+        self.hheaders = [
+            "📅 Date", 
+            "📝 Libellé opération", 
+            "💸 Débit", 
+            "💰 Crédit", 
+            "📊 Solde", 
+            ""
+        ]
+        
+        # Style moderne pour le tableau standard - SIMPLIFIÉ
+        self.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {COLORS['surface']};
+                border: none;
+                border-radius: 0;
+                gridline-color: {COLORS['border']};
+                selection-background-color: {COLORS['primary_light']};
+                font-family: "Segoe UI";
+                font-size: 10px;
+                alternate-background-color: {COLORS['surface_variant']};
+            }}
+            QHeaderView::section {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border: none;
+                padding: 12px 8px;
+                font-weight: bold;
+                font-size: 11px;
+                text-align: left;
+            }}
+            QTableWidget::item {{
+                padding: 10px 8px;
+                border-bottom: 1px solid {COLORS['surface_variant']};
+                font-size: 10px;
+            }}
+            QTableWidget::item:selected {{
+                background-color: {COLORS['primary_light']};
+                color: white;
+            }}
+            QTableWidget::item:hover {{
+                background-color: {COLORS['surface_variant']};
+            }}
+        """)
+        
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
 
@@ -400,7 +761,21 @@ class RapportTableWidget(FTableWidget):
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r"}
         self.ecart = -15
         self.display_vheaders = False
-        # self.refresh_()
+        
+        # Configuration moderne du tableau
+        header = self.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, header.ResizeToContents)
+        header.setSectionResizeMode(1, header.Stretch)
+        header.setSectionResizeMode(2, header.ResizeToContents)
+        header.setSectionResizeMode(3, header.ResizeToContents)
+        header.setSectionResizeMode(4, header.ResizeToContents)
+        
+        self.setAlternatingRowColors(True)
+        self.setSelectionBehavior(self.SelectRows)
+        self.verticalHeader().setVisible(False)
+        self.setShowGrid(True)
+        
         self.label_mov_tt = "-"
 
     def refresh_(self, provid_clt_id=None, search=None):
@@ -441,7 +816,6 @@ class RapportTableWidget(FTableWidget):
             )
             logger.debug(f"Filtre sur le client: {self.provider_clt.name}")
         else:
-            # Vue globale - tous les clients
             self.provider_clt = "Tous"
             try:
                 for prov in ProviderOrClient.select().where(
@@ -579,14 +953,50 @@ class RapportCISSTableWidget(FTableWidget):
         FTableWidget.__init__(self, parent=parent, *args, **kwargs)
 
         self.hheaders = [
-            "Date",
-            "Libelle opération",
-            "Poids (kg)",
-            "Débit",
-            "Crédit",
-            "Solde",
+            "📅 Date",
+            "📝 Libellé opération",
+            "⚖️ Poids (kg)",
+            "💸 Débit",
+            "💰 Crédit",
+            "📊 Solde",
             "",
         ]
+        
+        # Style moderne pour le tableau CISS - SIMPLIFIÉ
+        self.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {COLORS['surface']};
+                border: none;
+                border-radius: 0;
+                gridline-color: {COLORS['border']};
+                selection-background-color: {COLORS['primary_light']};
+                font-family: "Segoe UI";
+                font-size: 10px;
+                alternate-background-color: {COLORS['surface_variant']};
+            }}
+            QHeaderView::section {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border: none;
+                padding: 12px 8px;
+                font-weight: bold;
+                font-size: 11px;
+                text-align: left;
+            }}
+            QTableWidget::item {{
+                padding: 10px 8px;
+                border-bottom: 1px solid {COLORS['surface_variant']};
+                font-size: 10px;
+            }}
+            QTableWidget::item:selected {{
+                background-color: {COLORS['primary_light']};
+                color: white;
+            }}
+            QTableWidget::item:hover {{
+                background-color: {COLORS['surface_variant']};
+            }}
+        """)
+        
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
 
@@ -595,9 +1005,22 @@ class RapportCISSTableWidget(FTableWidget):
         self.sorter = False
         self.stretch_columns = [0, 1, 2, 3, 4, 5]
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r", 5: "r"}
-        # self.ecart = -5
         self.display_vheaders = False
-        # self.refresh_()
+        
+        # Configuration moderne du tableau
+        header = self.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, header.ResizeToContents)
+        header.setSectionResizeMode(1, header.Stretch)
+        header.setSectionResizeMode(2, header.ResizeToContents)
+        header.setSectionResizeMode(3, header.ResizeToContents)
+        header.setSectionResizeMode(4, header.ResizeToContents)
+        header.setSectionResizeMode(5, header.ResizeToContents)
+        
+        self.setAlternatingRowColors(True)
+        self.setSelectionBehavior(self.SelectRows)
+        self.verticalHeader().setVisible(False)
+        self.setShowGrid(True)
 
     def refresh_(self, provid_clt_id=None, search=None):
         """Rafraîchissement avec calculs améliorés pour CISS"""

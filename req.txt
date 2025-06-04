@@ -21,3 +21,4 @@ reportlab==4.2.2
 requests==2.32.3
 tomlkit==0.13.0
 urllib3==2.2.2
+xlsxwriter==3.2.3
