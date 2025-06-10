@@ -39,28 +39,107 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Palette de couleurs moderne (cohérente avec les autres fichiers)
+COLORS = {
+    'primary': '#1976D2',
+    'primary_light': '#42A5F5',
+    'primary_dark': '#0D47A1',
+    'secondary': '#FF5722',
+    'secondary_light': '#FF8A65',
+    'success': '#4CAF50',
+    'success_light': '#81C784',
+    'warning': '#FF9800',
+    'warning_light': '#FFB74D',
+    'error': '#F44336',
+    'error_light': '#E57373',
+    'info': '#2196F3',
+    'info_light': '#64B5F6',
+    'background': '#F8F9FA',
+    'surface': '#FFFFFF',
+    'surface_variant': '#F5F5F5',
+    'text_primary': '#212121',
+    'text_secondary': '#757575',
+    'border': '#E0E0E0',
+    'shadow': 'rgba(0, 0, 0, 0.1)'
+}
+
 ALL_CONTACTS = "TOUS"
 
 
 class DebtsTrashViewWidget(FWidget):
 
-    """Shows the home page"""
+    """Affiche la page de gestion de la corbeille avec design moderne"""
 
     def __init__(self, parent=0, *args, **kwargs):
-        logger.debug("Initialisation de DebtsTrashViewWidget")
+        logger.debug("Initialisation de DebtsTrashViewWidget avec design moderne")
         super(DebtsTrashViewWidget, self).__init__(parent=parent, *args, **kwargs)
         self.parent = parent
         self.parentWidget().setWindowTitle(
-            Config.APP_NAME + " Gestion des element supprimer"
+            Config.APP_NAME + " 🗑️ Gestion des éléments supprimés"
         )
-        logger.debug("Titre de la fenêtre défini")
+        logger.debug("Titre de la fenêtre défini avec style moderne")
 
-        self.title = "Movements"
+        # Style moderne pour le widget principal
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLORS['background']};
+                font-family: "Segoe UI", "Arial", sans-serif;
+                font-size: 12px;
+                color: {COLORS['text_primary']};
+            }}
+            QLabel {{
+                background-color: {COLORS['surface']};
+                color: {COLORS['text_primary']};
+                font-weight: 500;
+                font-size: 12px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                border: 1px solid {COLORS['border']};
+            }}
+            QSplitter {{
+                background-color: {COLORS['background']};
+            }}
+            QSplitter::handle {{
+                background-color: {COLORS['border']};
+                width: 3px;
+                height: 3px;
+            }}
+            QSplitter::handle:hover {{
+                background-color: {COLORS['primary_light']};
+            }}
+        """)
+
+        self.title = "🗑️ Mouvements supprimés"
         self.now = datetime.now().strftime(Config.DATEFORMAT)
         logger.debug(f"Date actuelle: {self.now}")
 
+        # Labels modernes avec style amélioré
         self.label_balance = FormLabel("")
+        self.label_balance.setStyleSheet(f"""
+            QLabel {{
+                background-color: {COLORS['surface']};
+                color: {COLORS['primary']};
+                font-weight: 700;
+                font-size: 14px;
+                padding: 16px 20px;
+                border-radius: 12px;
+                border: 2px solid {COLORS['primary_light']};
+                margin: 8px 0;
+            }}
+        """)
+        
         self.label_owner = FormLabel("")
+        self.label_owner.setStyleSheet(f"""
+            QLabel {{
+                background-color: {COLORS['info_light']};
+                color: white;
+                font-weight: 600;
+                font-size: 13px;
+                padding: 12px 16px;
+                border-radius: 8px;
+                margin: 4px 0;
+            }}
+        """)
 
         if Config.CISS:
             logger.debug("Configuration CISS activée")
@@ -69,40 +148,133 @@ class DebtsTrashViewWidget(FWidget):
             logger.debug("Configuration CISS désactivée")
             self.table = RapportTableWidget(parent=self)
 
-        self.button = Button("Ok")
+        # Bouton de rafraîchissement moderne
+        self.button = Button("🔄 Actualiser")
         self.button.clicked.connect(self.refresh_period)
-        logger.debug("Bouton de rafraîchissement configuré")
+        self.button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['info']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-weight: 600;
+                font-size: 12px;
+                min-height: 40px;
+                margin: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['info_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['info']};
+            }}
+        """)
+        logger.debug("Bouton de rafraîchissement configuré avec style moderne")
 
-        self.add_btt = Button("Supprimer")
+        # Bouton de suppression définitive moderne
+        self.add_btt = Button("🗑️ Supprimer définitivement")
         self.add_btt.setEnabled(False)
         self.add_btt.clicked.connect(self.suppression)
         self.add_btt.setMaximumHeight(90)
-        self.add_btt.setIcon(
-            QIcon("{img_media}del.png".format(img_media=Config.img_media))
-        )
-        logger.debug("Bouton de suppression configuré")
+        self.add_btt.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['error']};
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 16px 24px;
+                font-weight: 700;
+                font-size: 12px;
+                min-width: 180px;
+                min-height: 60px;
+                margin: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['error_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['error']};
+            }}
+            QPushButton:disabled {{
+                background-color: {COLORS['surface_variant']};
+                color: {COLORS['text_secondary']};
+            }}
+        """)
+        logger.debug("Bouton de suppression configuré avec style moderne")
 
-        self.sub_btt = Button("Restorer")
+        # Bouton de restauration moderne
+        self.sub_btt = Button("♻️ Restaurer")
         self.sub_btt.setEnabled(False)
         self.sub_btt.clicked.connect(self.restoration)
         self.sub_btt.setMaximumHeight(90)
-        logger.debug("Bouton de restauration configuré")
+        self.sub_btt.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['success']};
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 16px 24px;
+                font-weight: 700;
+                font-size: 12px;
+                min-width: 140px;
+                min-height: 60px;
+                margin: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['success_light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLORS['success']};
+            }}
+            QPushButton:disabled {{
+                background-color: {COLORS['surface_variant']};
+                color: {COLORS['text_secondary']};
+            }}
+        """)
+        logger.debug("Bouton de restauration configuré avec style moderne")
 
         editbox = QGridLayout()
         editbox.addWidget(self.label_owner, 0, 0)
         editbox.setColumnStretch(0, 2)
         editbox.addWidget(self.sub_btt, 0, 3)
         editbox.addWidget(self.add_btt, 0, 4)
-        logger.debug("Mise en page principale configurée")
+        editbox.setSpacing(12)
+        editbox.setContentsMargins(16, 8, 16, 8)
+        logger.debug("Mise en page principale configurée avec espacement moderne")
 
         self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
         logger.debug("Table des fournisseurs/clients initialisée")
 
+        # Champ de recherche moderne
         self.search_field = LineEdit()
         self.search_field.textChanged.connect(self.search)
-        self.search_field.setPlaceholderText("Rechercher un compte")
+        self.search_field.setPlaceholderText("🔍 Rechercher un compte...")
         self.search_field.setMaximumHeight(40)
-        logger.debug("Champ de recherche configuré")
+        self.search_field.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLORS['surface']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 20px;
+                padding: 12px 20px;
+                font-size: 12px;
+                color: {COLORS['text_primary']};
+                font-weight: 500;
+                min-height: 16px;
+            }}
+            QLineEdit:focus {{
+                border-color: {COLORS['primary']};
+                background-color: {COLORS['surface']};
+            }}
+            QLineEdit:hover {{
+                border-color: {COLORS['primary_light']};
+            }}
+            QLineEdit::placeholder {{
+                color: {COLORS['text_secondary']};
+                font-style: italic;
+            }}
+        """)
+        logger.debug("Champ de recherche configuré avec style moderne")
 
         self.splt_add = QSplitter(Qt.Horizontal)
         self.splt_add.setLayout(editbox)
@@ -121,10 +293,14 @@ class DebtsTrashViewWidget(FWidget):
         splitter.addWidget(self.splitter_left)
         splitter.addWidget(self.splt_clt)
 
+        # Proportions par défaut pour une meilleure répartition
+        splitter.setSizes([250, 750])
+
         hbox = QHBoxLayout(self)
+        hbox.setContentsMargins(16, 16, 16, 16)
         hbox.addWidget(splitter)
         self.setLayout(hbox)
-        logger.debug("Mise en page finale configurée")
+        logger.debug("Mise en page finale configurée avec design moderne")
 
     def refresh_period(self):
         logger.debug("Rafraîchissement de la période")
@@ -137,42 +313,106 @@ class DebtsTrashViewWidget(FWidget):
 
     def suppression(self):
         provid_clt_id = self.table_provid_clt.provid_clt_id
-        logger.debug(f"Suppression du compte ID: {provid_clt_id}")
-        ProviderOrClient.get(id=provid_clt_id).delete_permanate()
-        self.table_provid_clt.refresh_()
-        logger.debug("Compte supprimé avec succès")
+        logger.debug(f"Suppression définitive du compte ID: {provid_clt_id}")
+        try:
+            ProviderOrClient.get(id=provid_clt_id).delete_permanate()
+            self.table_provid_clt.refresh_()
+            self.parent.Notify("✅ Compte supprimé définitivement avec succès", "success")
+            logger.debug("Compte supprimé définitivement avec succès")
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression définitive: {str(e)}")
+            self.parent.Notify(f"❌ Erreur lors de la suppression: {str(e)}", "error")
 
     def restoration(self):
         provid_clt_id = self.table_provid_clt.provid_clt_id
         logger.debug(f"Restauration du compte ID: {provid_clt_id}")
-        ProviderOrClient.get(id=provid_clt_id).restore_data()
-        self.table_provid_clt.refresh_()
-        logger.debug("Compte restauré avec succès")
+        try:
+            ProviderOrClient.get(id=provid_clt_id).restore_data()
+            self.table_provid_clt.refresh_()
+            self.parent.Notify("♻️ Compte restauré avec succès", "success")
+            logger.debug("Compte restauré avec succès")
+        except Exception as e:
+            logger.error(f"Erreur lors de la restauration: {str(e)}")
+            self.parent.Notify(f"❌ Erreur lors de la restauration: {str(e)}", "error")
 
     def display_balance(self, amount_text):
-        logger.debug(f"Affichage du solde: {amount_text}")
-        return """ <h2>Solde du {} = <b>{}</b></h2>
-               """.format(
-            self.now, amount_text
-        )
+        logger.debug(f"Affichage du solde avec style moderne: {amount_text}")
+        return f"""
+            <div style="text-align: center; padding: 16px;">
+                <h2 style="color: {COLORS['primary']}; margin: 0; font-weight: 700;">
+                    💰 Solde du {self.now}
+                </h2>
+                <h1 style="color: {COLORS['success']}; margin: 8px 0; font-weight: 800; font-size: 24px;">
+                    {amount_text}
+                </h1>
+            </div>
+        """
 
 
 class ProviderOrClientTableWidget(QListWidget):
 
-    """affiche tout le nom de tous les provid_cltes"""
+    """Affiche la liste des fournisseurs/clients supprimés avec style moderne"""
 
     def __init__(self, parent, *args, **kwargs):
-        logger.debug("Initialisation de ProviderOrClientTableWidget")
+        logger.debug("Initialisation de ProviderOrClientTableWidget avec design moderne")
         super(ProviderOrClientTableWidget, self).__init__(parent)
 
         self.parent = parent
         self.setAutoScroll(True)
         self.itemSelectionChanged.connect(self.handleClicked)
+        
+        # Style moderne pour la liste
+        self.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {COLORS['surface']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 12px;
+                padding: 8px;
+                font-size: 12px;
+                color: {COLORS['text_primary']};
+                selection-background-color: {COLORS['primary_light']};
+                alternate-background-color: {COLORS['surface_variant']};
+            }}
+            QListWidget::item {{
+                background-color: {COLORS['surface']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 6px;
+                padding: 8px 12px;
+                margin: 2px;
+                font-weight: 500;
+            }}
+            QListWidget::item:hover {{
+                background-color: {COLORS['primary_light']};
+                color: white;
+                border-color: {COLORS['primary']};
+            }}
+            QListWidget::item:selected {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border-color: {COLORS['primary_dark']};
+                font-weight: 600;
+            }}
+            QScrollBar:vertical {{
+                background-color: {COLORS['surface_variant']};
+                width: 12px;
+                border-radius: 6px;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {COLORS['border']};
+                border-radius: 6px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {COLORS['primary_light']};
+            }}
+        """)
+        
         self.refresh_()
-        logger.debug("Table des fournisseurs/clients initialisée")
+        logger.debug("Table des fournisseurs/clients initialisée avec style moderne")
 
     def refresh_(self, provid_clt=None):
-        """Rafraichir la liste des provid_cltes"""
+        """Rafraichir la liste des fournisseurs/clients supprimés"""
         logger.debug("Rafraîchissement de la liste des fournisseurs/clients")
         self.clear()
         self.addItem(ProviderOrClientQListWidgetItem(ALL_CONTACTS))
@@ -208,11 +448,11 @@ class ProviderOrClientTableWidget(QListWidget):
 
 class ProviderOrClientQListWidgetItem(QListWidgetItem):
     def __init__(self, provid_clt):
-        logger.debug("Initialisation d'un élément de la liste")
+        logger.debug("Initialisation d'un élément de la liste avec style moderne")
         super(ProviderOrClientQListWidgetItem, self).__init__()
 
         self.provid_clt = provid_clt
-        self.setSizeHint(QSize(0, 30))
+        self.setSizeHint(QSize(0, 35))  # Hauteur légèrement augmentée pour le style moderne
         icon = QIcon()
 
         if not isinstance(self.provid_clt, str):
@@ -229,17 +469,23 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
 
     def init_text(self):
         try:
-            self.setText(self.provid_clt.name)
-            logger.debug(f"Texte défini: {self.provid_clt.name}")
+            # Ajout d'une icône selon l'état
+            if self.provid_clt.is_indebted():
+                text = f"⚠️ {self.provid_clt.name}"
+            else:
+                text = f"👤 {self.provid_clt.name}"
+            self.setText(text)
+            logger.debug(f"Texte défini avec icône: {text}")
         except AttributeError:
             font = QFont()
             font.setBold(True)
+            font.setPointSize(13)
             self.setFont(font)
             self.setTextAlignment(Qt.AlignCenter)
 
             if not Config.DEVISE_PEP_PROV:
-                self.setText("Tous")
-                logger.debug("Texte par défaut défini: 'Tous'")
+                self.setText("📋 Tous les comptes")
+                logger.debug("Texte par défaut défini avec style: 'Tous les comptes'")
 
     @property
     def provid_clt_id(self):

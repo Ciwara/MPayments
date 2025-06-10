@@ -168,7 +168,9 @@ class MainWindow(FMainWindow):
                 self.settings.TOP: Qt.TopToolBarArea,
                 self.settings.BOTTOM: Qt.BottomToolBarArea,
             }
-            self.addToolBar(ptn.get(self.settings.toolbar_position), self.toolbar)
+            # Utiliser TOP comme position par défaut si toolbar_position est None ou invalide
+            toolbar_area = ptn.get(self.settings.toolbar_position, Qt.TopToolBarArea)
+            self.addToolBar(toolbar_area, self.toolbar)
 
         self.page = DashboardWidget
         logger.debug("Changement de contexte vers DashboardWidget")
