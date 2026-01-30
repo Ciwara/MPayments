@@ -207,38 +207,14 @@ class Payment(BaseModel):
         """
         Calcul du balance en stock après une operation."""
         try:
-            self.owner = Owner.get(Owner.islog == True)
+            self.owner = Owner.get(Owner.is_identified == True)
         except Owner.DoesNotExist:
             # Créer un Owner par défaut si aucun n'existe avec islog == True
             try:
                 # Essayer de récupérer le premier Owner existant
                 self.owner = Owner.select().first()
-                if not self.owner:
-                    # Si aucun Owner n'existe, en créer un par défaut
-                    current_time = datetime.now()
-                    owner = Owner(
-                        username="admin",
-                        islog=True,
-                        group="administrators", 
-                        phone="0000000000",
-                        password="admin123",
-                        isactive=True,
-                        last_login=current_time,
-                        login_count=0,
-                        is_syncro=False,
-                        last_update_date=current_time
-                    )
-                    try:
-                        owner.save()
-                        self.owner = owner
-                        logger.info("Owner par défaut créé lors de la sauvegarde du paiement")
-                    except Exception as save_error:
-                        logger.error(f"Impossible de créer un Owner: {str(save_error)}")
-                        # Assigner None pour éviter l'erreur fatale
-                        self.owner = None
             except Exception as e:
                 # Si aucun Owner n'existe et qu'on ne peut pas en créer un,
-                # on peut soit lever une exception ou assigner None
                 logger.error(f"Impossible de créer ou récupérer un Owner: {str(e)}")
                 # Pour éviter l'erreur, on peut assigner None temporairement
                 self.owner = None

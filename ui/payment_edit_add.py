@@ -5,9 +5,9 @@ from __future__ import unicode_literals, absolute_import, division, print_functi
 
 import logging
 
-from PyQt5.QtCore import QDate, Qt
-from PyQt5.QtWidgets import QVBoxLayout, QDialog, QTextEdit, QFormLayout
-from PyQt5.QtGui import QFont
+from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtWidgets import QVBoxLayout, QDialog, QTextEdit, QFormLayout
+from PyQt6.QtGui import QFont
 
 from configuration import Config
 
@@ -105,122 +105,20 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
         logger.debug(f"Titre du dialogue: {self.title}")
         
         # Style moderne pour la fenêtre de dialogue
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {COLORS['background']};
-                font-family: "Segoe UI", "Arial", sans-serif;
-                font-size: 12px;
-            }}
-            QLabel {{
-                color: {COLORS['text_primary']};
-                font-weight: 600;
-                font-size: 12px;
-                padding: 4px 0;
-            }}
-        """)
         
         # Dimensions modernes
         self.setMinimumSize(420, 350)
         self.setMaximumSize(500, 450)
 
         # Champs de saisie modernes
-        self.payment_date_field.setStyleSheet(f"""
-            QDateEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 10px 12px;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-                font-weight: 500;
-                min-height: 20px;
-            }}
-            QDateEdit:focus {{
-                border-color: {COLORS['primary']};
-            }}
-            QDateEdit:hover {{
-                border-color: {COLORS['primary_light']};
-            }}
-            QDateEdit:disabled {{
-                background-color: {COLORS['surface_variant']};
-                color: {COLORS['text_secondary']};
-                border-color: {COLORS['border']};
-            }}
-            QDateEdit::drop-down {{
-                border: none;
-                width: 20px;
-            }}
-            QDateEdit::down-arrow {{
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid {COLORS['text_secondary']};
-                margin-right: 8px;
-            }}
-        """)
         
         self.payment_weight_field = FloatLineEdit(str(weight).replace(".", ","))
-        self.payment_weight_field.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 10px 12px;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-                font-weight: 500;
-                min-height: 20px;
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['primary']};
-            }}
-            QLineEdit:hover {{
-                border-color: {COLORS['primary_light']};
-            }}
-        """)
         self.payment_weight_field.setFixedHeight(40)
         
         self.amount_field = FloatLineEdit(str(amount).replace(".", ","))
-        self.amount_field.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['primary_light']};
-                border-radius: 8px;
-                padding: 10px 12px;
-                font-size: 14px;
-                color: {COLORS['text_primary']};
-                font-weight: 600;
-                min-height: 24px;
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['primary']};
-                background-color: {COLORS['surface']};
-            }}
-            QLineEdit:hover {{
-                border-color: {COLORS['primary']};
-            }}
-        """)
         self.amount_field.setFixedHeight(45)
         
         self.libelle_field = QTextEdit(self.payment.libelle)
-        self.libelle_field.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 10px 12px;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-                font-weight: 500;
-                min-height: 60px;
-            }}
-            QTextEdit:focus {{
-                border-color: {COLORS['primary']};
-            }}
-            QTextEdit:hover {{
-                border-color: {COLORS['primary_light']};
-            }}
-        """)
         self.libelle_field.setFixedHeight(80)
         logger.debug("Champs de saisie initialisés avec style moderne")
 
@@ -230,25 +128,15 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
         
         # Titre principal moderne
         title_label = FormLabel(self.title)
-        title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title_label.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['primary']};
-                font-weight: 700;
-                font-size: 16px;
-                padding: 16px 0;
-                border-bottom: 2px solid {COLORS['primary_light']};
-                margin-bottom: 16px;
-            }}
-        """)
+        title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         vbox.addWidget(title_label)
 
         # Formulaire moderne avec espacement amélioré
         formbox = QFormLayout()
         formbox.setSpacing(16)
         formbox.setContentsMargins(0, 0, 0, 0)
-        formbox.setLabelAlignment(Qt.AlignLeft)
-        formbox.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        formbox.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        formbox.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         
         # Labels avec icônes
         formbox.addRow(FormLabel("📅 Date : *"), self.payment_date_field)
@@ -268,26 +156,6 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
 
         # Bouton d'enregistrement moderne
         butt = ButtonSave("💾 Enregistrer")
-        butt.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['success']};
-                color: white;
-                border: none;
-                border-radius: 12px;
-                padding: 16px 32px;
-                font-weight: 700;
-                font-size: 13px;
-                min-width: 200px;
-                min-height: 50px;
-                margin-top: 16px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['success_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['success']};
-            }}
-        """)
         butt.clicked.connect(self.save_edit)
         formbox.addRow("", butt)
         logger.debug("Formulaire configuré avec style moderne")

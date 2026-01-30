@@ -7,10 +7,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from Common.ui.cmenubar import FMenuBar
 from Common.ui.common import FWidget
 from configuration import Config
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtWidgets import QAction
+from PyQt6.QtGui import QIcon, QPixmap, QAction
 
-# from PyQt5.QtCore import SIGNAL
+# from PyQt6.QtCore import SIGNAL
 
 
 class MenuBar(FMenuBar, FWidget):

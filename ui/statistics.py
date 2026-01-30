@@ -7,9 +7,20 @@ import logging
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
 
-from PyQt5.QtWidgets import QVBoxLayout, QGridLayout, QMenu, QFrame, QHBoxLayout, QLabel
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QVBoxLayout,
+    QGridLayout,
+    QMenu,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QAbstractItemView,
+    QHeaderView,
+    QComboBox,
+    QPushButton,
+)
+from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtGui import QFont
 
 from configuration import Config
 from Common.ui.common import (
@@ -112,198 +123,67 @@ def calculate_running_balance(payments_data):
 
 class StatisticsViewWidget(FWidget, FPeriodHolder):
     def __init__(self, parent=0, *args, **kwargs):
-        logger.debug("Initialisation de StatisticsViewWidget avec design moderne")
         super(StatisticsViewWidget, self).__init__(parent=parent, *args, **kwargs)
         FPeriodHolder.__init__(self, *args, **kwargs)
-
+        self.setObjectName("statistics_root")
         self.parent = parent
-
-        self.title = u"Movements"
+        self.title = "Movements"
         self.compte = self.compte_name = "Tous"
-
-        # Style moderne pour le widget principal
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLORS['background']};
-                font-family: "Segoe UI", "Arial", sans-serif;
-            }}
-        """)
 
         # Optimisation des champs de date avec style moderne
         self.on_date_field = FormatDate(QDate(date.today().year, date.today().month, 1))
         self.on_date_field.dateChanged.connect(self.refresh_prov_clt)
-        self.on_date_field.setStyleSheet(f"""
-            QDateEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 8px 12px;
-                font-size: 11px;
-                color: {COLORS['text_primary']};
-                min-height: 20px;
-            }}
-            QDateEdit:focus {{
-                border-color: {COLORS['primary']};
-            }}
-            QDateEdit::drop-down {{
-                border: none;
-                width: 20px;
-            }}
-        """)
         
         self.end_date_field = FormatDate(QDate.currentDate())
         self.end_date_field.dateChanged.connect(self.refresh_prov_clt)
-        self.end_date_field.setStyleSheet(self.on_date_field.styleSheet())
         
         self.now = datetime.now().strftime(Config.DATEFORMAT)
         
         # Configuration moderne des labels de balance
         self.balanceField = QLabel("")
-        self.balanceField.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        self.balanceField.setStyleSheet(f"""
-            QLabel {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {COLORS['primary']},
-                    stop:1 {COLORS['primary_dark']});
-                color: white;
-                border-radius: 12px;
-                padding: 16px 24px;
-                margin: 8px 0;
-                font-weight: 700;
-            }}
-        """)
+        self.balanceField.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         self.balanceField.setFixedHeight(60)
         
         # Conteneur moderne pour la balance
         balance_container = QFrame()
-        balance_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: transparent;
-                border: none;
-            }}
-        """)
         balance_layout = QHBoxLayout()
         balance_layout.addStretch()
         balance_layout.addWidget(self.balanceField)
         balance_layout.addStretch()
         balance_container.setLayout(balance_layout)
 
-        # Cache pour optimiser les requêtes fréquentes
         self._cached_client_list = None
         self._last_client_refresh = None
-        
-        # Récupération optimisée de la liste des clients
+        self._type_filter = "Clients"
+
+        # Filtre par type (Clients / Fournisseurs / Tous)
+        self.type_filter_combo = QComboBox()
+        self.type_filter_combo.addItems(["Clients", "Fournisseurs", "Tous"])
+        self.type_filter_combo.currentTextChanged.connect(self._on_type_filter_changed)
+
         self.refresh_client_list()
-        
-        # Titre moderne avec style amélioré
+
         self.title_field = QLabel("📊 Statistiques - Tous")
-        self.title_field.setFont(QFont("Segoe UI", 18, QFont.Bold))
-        self.title_field.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['text_primary']};
-                margin: 16px 0;
-                font-weight: 700;
-                letter-spacing: -0.5px;
-            }}
-        """)
-        self.title_field.setFixedHeight(50)
-        
-        # ComboBox moderne pour les comptes
+        self.title_field.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.title_field.setStyleSheet(f"color: {COLORS['text_primary']};")
+
         self.compte_field = ExtendedComboBox()
         self.compte_field.addItems(self.string_list)
-        self.compte_field.setToolTip("Nom du compte")
+        self.compte_field.setToolTip("Sélectionner un compte (optionnel)")
         self.compte_field.currentIndexChanged.connect(self.refresh_prov_clt)
-        self.compte_field.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 8px 12px;
-                min-width: 200px;
-                min-height: 20px;
-                font-size: 11px;
-                font-weight: 500;
-                color: {COLORS['text_primary']};
-            }}
-            QComboBox:hover {{
-                border-color: {COLORS['primary_light']};
-            }}
-            QComboBox:focus {{
-                border-color: {COLORS['primary']};
-            }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 20px;
-                margin-right: 4px;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid {COLORS['text_secondary']};
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                selection-background-color: {COLORS['primary_light']};
-                padding: 4px;
-            }}
-        """)
+
+        # Bouton Rafraîchir
+        self.btt_refresh = QPushButton("🔄 Rafraîchir")
+        self.btt_refresh.clicked.connect(self._do_refresh)
+        self.btt_refresh.setFixedSize(100, 40)
 
         # Boutons d'export modernes
         self.btt_pdf_export = BttExportPDF("")
         self.btt_pdf_export.clicked.connect(self.export_pdf)
-        self.btt_pdf_export.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['error']},
-                    stop:1 {COLORS['error_light']});
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 12px;
-                font-weight: 600;
-                font-size: 11px;
-                min-width: 80px;
-                min-height: 32px;
-            }}
-            QPushButton:hover {{
-                background: {COLORS['error_light']};
-                transform: translateY(-1px);
-            }}
-            QPushButton:pressed {{
-                background: {COLORS['error']};
-                transform: translateY(0px);
-            }}
-        """)
         self.btt_pdf_export.setFixedSize(80, 40)
         
         self.btt_xlsx_export = BttExportXLSX("")
         self.btt_xlsx_export.clicked.connect(self.export_xlsx)
-        self.btt_xlsx_export.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['success']},
-                    stop:1 {COLORS['success_light']});
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 12px;
-                font-weight: 600;
-                font-size: 11px;
-                min-width: 80px;
-                min-height: 32px;
-            }}
-            QPushButton:hover {{
-                background: {COLORS['success_light']};
-                transform: translateY(-1px);
-            }}
-            QPushButton:pressed {{
-                background: {COLORS['success']};
-                transform: translateY(0px);
-            }}
-        """)
         self.btt_xlsx_export.setFixedSize(80, 40)
 
         # Configuration optimisée de la table avec style moderne
@@ -316,149 +196,153 @@ class StatisticsViewWidget(FWidget, FPeriodHolder):
 
         # Labels modernes pour les champs
         compte_label = QLabel("👤 Compte")
-        compte_label.setFont(QFont("Segoe UI", 11, QFont.DemiBold))
-        compte_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: 600;")
+        compte_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
 
         date_debut_label = QLabel("📅 Date début")
-        date_debut_label.setFont(QFont("Segoe UI", 11, QFont.DemiBold))
-        date_debut_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: 600;")
+        date_debut_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
 
         date_fin_label = QLabel("📅 Date fin")
-        date_fin_label.setFont(QFont("Segoe UI", 11, QFont.DemiBold))
-        date_fin_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: 600;")
+        date_fin_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
 
         export_label = QLabel("📤 Export")
-        export_label.setFont(QFont("Segoe UI", 11, QFont.DemiBold))
-        export_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: 600;")
+        export_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
 
         # Conteneur moderne pour les contrôles
         controls_container = QFrame()
-        controls_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 20px;
-                margin: 8px 0;
-            }}
-        """)
 
         # Mise en page moderne des contrôles
         controls_layout = QGridLayout()
         controls_layout.setSpacing(16)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Première ligne - Labels
-        controls_layout.addWidget(compte_label, 0, 0)
-        controls_layout.addWidget(date_debut_label, 0, 1)
-        controls_layout.addWidget(date_fin_label, 0, 2)
-        controls_layout.addWidget(export_label, 0, 3, 1, 2)
+        type_label = QLabel("Type")
+        type_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        controls_layout.addWidget(type_label, 0, 0)
+        controls_layout.addWidget(compte_label, 0, 1)
+        controls_layout.addWidget(date_debut_label, 0, 2)
+        controls_layout.addWidget(date_fin_label, 0, 3)
+        controls_layout.addWidget(export_label, 0, 4, 1, 2)
+        controls_layout.addWidget(self.type_filter_combo, 1, 0)
+        controls_layout.addWidget(self.compte_field, 1, 1)
+        controls_layout.addWidget(self.on_date_field, 1, 2)
+        controls_layout.addWidget(self.end_date_field, 1, 3)
+        controls_layout.addWidget(self.btt_refresh, 1, 4)
+        controls_layout.addWidget(self.btt_pdf_export, 1, 5)
+        controls_layout.addWidget(self.btt_xlsx_export, 1, 6)
         
-        # Deuxième ligne - Contrôles
-        controls_layout.addWidget(self.compte_field, 1, 0)
-        controls_layout.addWidget(self.on_date_field, 1, 1)
-        controls_layout.addWidget(self.end_date_field, 1, 2)
-        controls_layout.addWidget(self.btt_pdf_export, 1, 3)
-        controls_layout.addWidget(self.btt_xlsx_export, 1, 4)
-        
-        # Espacement flexible
-        controls_layout.setColumnStretch(5, 1)
+        controls_layout.setColumnStretch(6, 1)
         
         controls_container.setLayout(controls_layout)
 
-        # Conteneur moderne pour la table
+        self.period_summary_label = QLabel("")
+        self.period_summary_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+
         table_container = QFrame()
-        table_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 0;
-                margin: 8px 0;
-            }}
-        """)
+        table_container.setObjectName("statistics_table_container")
         table_layout = QVBoxLayout()
         table_layout.setContentsMargins(0, 0, 0, 0)
         table_layout.addWidget(self.table)
         table_container.setLayout(table_layout)
 
-        # Ligne de séparation moderne
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {COLORS['primary_light']},
-                    stop:0.5 {COLORS['primary']},
-                    stop:1 {COLORS['primary_light']});
-                border: none;
-                height: 2px;
-                margin: 16px 0;
-            }}
-        """)
+        separator.setFrameShape(QFrame.Shape.HLine)
 
-        # Mise en page principale moderne
         vbox = QVBoxLayout()
         vbox.setSpacing(16)
         vbox.setContentsMargins(20, 20, 20, 20)
         vbox.addWidget(self.title_field)
         vbox.addWidget(separator)
         vbox.addWidget(controls_container)
+        vbox.addWidget(self.period_summary_label)
         vbox.addWidget(table_container)
         vbox.addWidget(balance_container)
         self.setLayout(vbox)
         
         logger.debug("StatisticsViewWidget initialisé avec succès - Design moderne appliqué")
 
+    def _on_type_filter_changed(self, text):
+        """Recharge la liste des comptes selon le type."""
+        self._type_filter = text
+        self.refresh_client_list()
+        self.compte_field.clear()
+        self.compte_field.addItems(self.string_list)
+        self.refresh_prov_clt()
+
+    def _do_refresh(self):
+        """Rafraîchit la liste et les données."""
+        self._cached_client_list = None
+        self.refresh_client_list()
+        self.compte_field.clear()
+        self.compte_field.addItems(self.string_list)
+        self.refresh_prov_clt()
+
     def refresh_client_list(self):
-        """Rafraîchit la liste des clients avec mise en cache"""
+        """Rafraîchit la liste des comptes (clients/fournisseurs) selon le filtre."""
         current_time = datetime.now()
-        
-        # Utiliser le cache si disponible et récent (moins de 30 secondes)
-        if (self._cached_client_list is not None and 
-            self._last_client_refresh is not None and 
-            (current_time - self._last_client_refresh).total_seconds() < 30):
+        if (self._cached_client_list is not None and
+            self._last_client_refresh is not None and
+            (current_time - self._last_client_refresh).total_seconds() < 30 and
+            getattr(self, "_type_filter", "Clients") == self._type_filter):
             self.string_list = self._cached_client_list
             return
-        
-        # Actualiser la liste
         try:
-            client_names = [
-                clt.name for clt in ProviderOrClient.select()
-                .where(ProviderOrClient.type_ == ProviderOrClient.CLT, 
-                       ProviderOrClient.deleted == False)
-                .order_by(ProviderOrClient.name.desc())
-            ]
-            self.string_list = [""] + client_names
-            
-            # Mettre à jour le cache
+            type_filter = getattr(self, "_type_filter", "Clients")
+            base = ProviderOrClient.select().where(ProviderOrClient.deleted == False)
+            if type_filter == "Clients":
+                names = [c.name for c in base.where(ProviderOrClient.type_ == ProviderOrClient.CLT).order_by(ProviderOrClient.name)]
+                self.string_list = [""] + names
+            elif type_filter == "Fournisseurs":
+                names = [f.name for f in base.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR).order_by(ProviderOrClient.name)]
+                self.string_list = [""] + names
+            else:
+                clients = [c.name for c in base.where(ProviderOrClient.type_ == ProviderOrClient.CLT).order_by(ProviderOrClient.name)]
+                fournisseurs = [f.name for f in base.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR).order_by(ProviderOrClient.name)]
+                self.string_list = [""] + [f"👤 {n}" for n in clients] + [f"🏢 {n}" for n in fournisseurs]
             self._cached_client_list = self.string_list
             self._last_client_refresh = current_time
-            
-            logger.debug(f"Liste des clients rafraîchie: {len(client_names)} clients")
-            
         except Exception as e:
-            logger.error(f"Erreur lors du rafraîchissement de la liste des clients: {e}")
+            logger.error(f"Erreur rafraîchissement liste comptes: {e}")
             self.string_list = [""]
 
     def refresh_prov_clt(self):
-        """Rafraîchit les données du fournisseur/client sélectionné"""
-        logger.debug("Rafraîchissement du client sélectionné")
-        
-        self.compte_name = self.compte_field.lineEdit().text()
-        self.title_field.setText(f"📊 Statistiques - {self.compte_name if self.compte_name else 'Tous'}")
-        
-        if self.compte_name and self.compte_name != "":
-            try:
-                self.compte = ProviderOrClient.get(name=self.compte_name)
-                logger.debug(f"Client sélectionné: {self.compte_name}")
-            except ProviderOrClient.DoesNotExist:
-                logger.warning(f"Client non trouvé: {self.compte_name}")
-                self.compte = "Tous"
-        else:
+        """Rafraîchit les données du compte sélectionné."""
+        self.compte_name = self.compte_field.lineEdit().text().strip() if hasattr(self.compte_field, "lineEdit") and self.compte_field.lineEdit() else self.compte_field.currentText() or ""
+        display_name = self.compte_name if self.compte_name else "Tous"
+        self.title_field.setText(f"📊 Statistiques — {display_name}")
+
+        if not self.compte_name:
             self.compte = "Tous"
+        else:
+            try:
+                if self.compte_name.startswith("👤 "):
+                    name = self.compte_name[2:].strip()
+                    self.compte = ProviderOrClient.get(name=name, type_=ProviderOrClient.CLT)
+                elif self.compte_name.startswith("🏢 "):
+                    name = self.compte_name[2:].strip()
+                    self.compte = ProviderOrClient.get(name=name, type_=ProviderOrClient.FSEUR)
+                else:
+                    self.compte = ProviderOrClient.get(name=self.compte_name)
+            except ProviderOrClient.DoesNotExist:
+                logger.warning(f"Compte non trouvé: {self.compte_name}")
+                self.compte = "Tous"
 
         self.table.refresh_()
+        self._update_period_summary()
+
+    def _update_period_summary(self):
+        """Met à jour le résumé de période (dates + nombre de lignes)."""
+        label = getattr(self, "period_summary_label", None)
+        if label is None:
+            return
+        try:
+            on_date = date_to_datetime(self.on_date_field.text())
+            end_date = date_to_datetime(self.end_date_field.text())
+            n = len(getattr(self.table, "data", []))
+            label.setText(
+                f"Période : du {on_date.strftime('%d/%m/%Y')} au {end_date.strftime('%d/%m/%Y')} — {n} mouvement(s)"
+            )
+        except Exception:
+            label.setText("")
 
     def export_pdf(self):
         """Export PDF optimisé"""
@@ -509,43 +393,8 @@ class RapportCISSTableWidget(FTableWidget):
         ]
         
         # Style moderne pour le tableau CISS
-        self.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {COLORS['surface']};
-                border: none;
-                border-radius: 0;
-                gridline-color: {COLORS['border']};
-                selection-background-color: {COLORS['primary_light']};
-                font-family: "Segoe UI";
-                font-size: 10px;
-                alternate-background-color: {COLORS['surface_variant']};
-            }}
-            QHeaderView::section {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['primary']},
-                    stop:1 {COLORS['primary_dark']});
-                color: white;
-                border: none;
-                padding: 12px 8px;
-                font-weight: 600;
-                font-size: 11px;
-                text-align: left;
-            }}
-            QTableWidget::item {{
-                padding: 10px 8px;
-                border-bottom: 1px solid {COLORS['surface_variant']};
-                font-size: 10px;
-            }}
-            QTableWidget::item:selected {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-            }}
-            QTableWidget::item:hover {{
-                background-color: {COLORS['surface_variant']};
-            }}
-        """)
         
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
 
         self.parent = parent
@@ -558,15 +407,15 @@ class RapportCISSTableWidget(FTableWidget):
         # Configuration moderne du tableau
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, header.ResizeToContents)
-        header.setSectionResizeMode(1, header.Stretch)
-        header.setSectionResizeMode(2, header.ResizeToContents)
-        header.setSectionResizeMode(3, header.ResizeToContents)
-        header.setSectionResizeMode(4, header.ResizeToContents)
-        header.setSectionResizeMode(5, header.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         
         self.setAlternatingRowColors(True)
-        self.setSelectionBehavior(self.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
         self.setShowGrid(True)
         
@@ -596,10 +445,10 @@ class RapportCISSTableWidget(FTableWidget):
         self.set_data_for()
         self.refresh()
 
+        provider = self.parent.compte if not isinstance(self.parent.compte, str) else None
         self.parent.balanceField.setText(
-            self.parent.display_balance(device_amount(self.balance_tt))
+            self.parent.display_balance(device_amount(self.balance_tt, provider))
         )
-
         self.hideColumn(len(self.hheaders) - 1)
 
     def set_data_for(self):
@@ -646,21 +495,23 @@ class RapportCISSTableWidget(FTableWidget):
         logger.debug(f"Données CISS récupérées: {len(self.data)} enregistrements")
 
     def popup(self, pos):
-        """Menu contextuel optimisé"""
+        """Menu contextuel avec garde sur les données."""
         from ui.deleteview import DeleteViewWidget
 
         try:
-            if (len(self.data) - 1) < self.selectionModel().selection().indexes()[0].row():
-                return False
-            
+            if not self.data:
+                return
+            indexes = self.selectionModel().selection().indexes()
+            if not indexes:
+                return
+            row = indexes[0].row()
+            if row < 0 or row >= len(self.data):
+                return
             menu = QMenu()
             editaction = menu.addAction("Modifier cette ligne")
             delaction = menu.addAction("Supprimer cette ligne")
-            action = menu.exec_(self.mapToGlobal(pos))
-            
-            row = self.selectionModel().selection().indexes()[0].row()
+            action = menu.exec(self.mapToGlobal(pos))
             payment = Payment.get(id=self.data[row][-1])
-            
             if action == editaction:
                 self.parent.open_dialog(
                     EditOrAddPaymentrDialog, modal=True, payment=payment, table_p=self
@@ -713,15 +564,16 @@ class RapportCISSTableWidget(FTableWidget):
         
         logger.debug(f"Totaux CISS calculés - Poids: {self.totals_weight}, Débit: {self.totals_debit}, Crédit: {self.totals_credit}, Balance: {self.balance_tt}")
 
-        self.label_mov_tt = u"Totals mouvements: "
+        provider = self.parent.compte if not isinstance(self.parent.compte, str) else None
+        self.label_mov_tt = "Totaux mouvements : "
         self.setItem(nb_rows, 1, TotalsWidget(self.label_mov_tt))
         self.setItem(
             nb_rows,
             2,
             TotalsWidget(device_amount(self.totals_weight, dvs="Kg", aftergam=3)),
         )
-        self.setItem(nb_rows, 3, TotalsWidget(device_amount(self.totals_debit)))
-        self.setItem(nb_rows, 4, TotalsWidget(device_amount(self.totals_credit)))
+        self.setItem(nb_rows, 3, TotalsWidget(device_amount(self.totals_debit, provider)))
+        self.setItem(nb_rows, 4, TotalsWidget(device_amount(self.totals_credit, provider)))
 
     def dict_data(self):
         """Données d'export CISS optimisées"""
@@ -741,7 +593,8 @@ class RapportCISSTableWidget(FTableWidget):
                     "C",
                     "E",
                     "Solde du {} = {}".format(
-                        self.end_date.strftime("%x"), device_amount(self.balance_tt)
+                        self.end_date.strftime("%x"),
+                        device_amount(self.balance_tt, self.parent.compte if not isinstance(self.parent.compte, str) else None),
                     ),
                 )
             ],
@@ -776,43 +629,8 @@ class RapportTableWidget(FTableWidget):
         ]
         
         # Style moderne pour le tableau standard
-        self.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {COLORS['surface']};
-                border: none;
-                border-radius: 0;
-                gridline-color: {COLORS['border']};
-                selection-background-color: {COLORS['primary_light']};
-                font-family: "Segoe UI";
-                font-size: 10px;
-                alternate-background-color: {COLORS['surface_variant']};
-            }}
-            QHeaderView::section {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['primary']},
-                    stop:1 {COLORS['primary_dark']});
-                color: white;
-                border: none;
-                padding: 12px 8px;
-                font-weight: 600;
-                font-size: 11px;
-                text-align: left;
-            }}
-            QTableWidget::item {{
-                padding: 10px 8px;
-                border-bottom: 1px solid {COLORS['surface_variant']};
-                font-size: 10px;
-            }}
-            QTableWidget::item:selected {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-            }}
-            QTableWidget::item:hover {{
-                background-color: {COLORS['surface_variant']};
-            }}
-        """)
         
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
 
         self.parent = parent
@@ -824,14 +642,14 @@ class RapportTableWidget(FTableWidget):
         # Configuration moderne du tableau
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, header.ResizeToContents)
-        header.setSectionResizeMode(1, header.Stretch)
-        header.setSectionResizeMode(2, header.ResizeToContents)
-        header.setSectionResizeMode(3, header.ResizeToContents)
-        header.setSectionResizeMode(4, header.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
         self.setAlternatingRowColors(True)
-        self.setSelectionBehavior(self.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
         self.setShowGrid(True)
         
@@ -859,10 +677,10 @@ class RapportTableWidget(FTableWidget):
         self._reset()
         self.set_data_for()
         self.refresh()
-        self.refresh()
 
+        provider = self.parent.compte if not isinstance(self.parent.compte, str) else None
         self.parent.balanceField.setText(
-            self.parent.display_balance(device_amount(self.balance_tt))
+            self.parent.display_balance(device_amount(self.balance_tt, provider))
         )
 
         self.hideColumn(len(self.hheaders) - 1)
@@ -903,21 +721,23 @@ class RapportTableWidget(FTableWidget):
         logger.debug(f"Données récupérées: {len(self.data)} enregistrements")
 
     def popup(self, pos):
-        """Menu contextuel optimisé"""
+        """Menu contextuel avec garde sur les données."""
         from ui.deleteview import DeleteViewWidget
 
         try:
-            if (len(self.data) - 1) < self.selectionModel().selection().indexes()[0].row():
-                return False
-            
+            if not self.data:
+                return
+            indexes = self.selectionModel().selection().indexes()
+            if not indexes:
+                return
+            row = indexes[0].row()
+            if row < 0 or row >= len(self.data):
+                return
             menu = QMenu()
             editaction = menu.addAction("Modifier cette ligne")
             delaction = menu.addAction("Supprimer cette ligne")
-            action = menu.exec_(self.mapToGlobal(pos))
-            
-            row = self.selectionModel().selection().indexes()[0].row()
+            action = menu.exec(self.mapToGlobal(pos))
             payment = Payment.get(id=self.data[row][-1])
-            
             if action == editaction:
                 self.parent.open_dialog(
                     EditOrAddPaymentrDialog, modal=True, payment=payment, table_p=self
@@ -967,10 +787,11 @@ class RapportTableWidget(FTableWidget):
         
         logger.debug(f"Totaux calculés - Débit: {self.totals_debit}, Crédit: {self.totals_credit}, Balance: {self.balance_tt}")
 
-        self.label_mov_tt = u"Totals mouvements: "
+        provider = self.parent.compte if not isinstance(self.parent.compte, str) else None
+        self.label_mov_tt = "Totaux mouvements : "
         self.setItem(nb_rows, 1, TotalsWidget(self.label_mov_tt))
-        self.setItem(nb_rows, 2, TotalsWidget(device_amount(self.totals_debit)))
-        self.setItem(nb_rows, 3, TotalsWidget(device_amount(self.totals_credit)))
+        self.setItem(nb_rows, 2, TotalsWidget(device_amount(self.totals_debit, provider)))
+        self.setItem(nb_rows, 3, TotalsWidget(device_amount(self.totals_credit, provider)))
 
     def dict_data(self):
         """Données d'export optimisées"""
@@ -989,7 +810,8 @@ class RapportTableWidget(FTableWidget):
                     "C",
                     "E",
                     "Solde du {} = {}".format(
-                        self.end_date.strftime("%x"), device_amount(self.balance_tt)
+                        self.end_date.strftime("%x"),
+                        device_amount(self.balance_tt, self.parent.compte if not isinstance(self.parent.compte, str) else None),
                     ),
                 ),
             ],

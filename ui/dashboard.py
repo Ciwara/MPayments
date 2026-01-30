@@ -9,14 +9,14 @@ import logging
 from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
     QLabel, QFrame, QPushButton, QComboBox, QProgressBar,
     QScrollArea, QGroupBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QSpacerItem, QSizePolicy
+    QHeaderView, QSpacerItem, QSizePolicy, QAbstractItemView
 )
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt5.QtGui import QFont, QPalette, QColor, QPixmap, QIcon, QLinearGradient, QPainter
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QFont, QPalette, QColor, QPixmap, QIcon, QLinearGradient, QPainter
 
 from Common.ui.common import FWidget
 from configuration import Config
@@ -42,252 +42,263 @@ COLORS = {
     'error_light': '#E57373',
     'info': '#2196F3',
     'info_light': '#64B5F6',
-    'background': '#F8F9FA',
+    'background': '#F0F2F5',
     'surface': '#FFFFFF',
     'surface_variant': '#F5F5F5',
-    'text_primary': '#212121',
-    'text_secondary': '#757575',
+    'text_primary': '#1a1a2e',
+    'text_secondary': '#6c757d',
     'border': '#E0E0E0',
-    'shadow': 'rgba(0, 0, 0, 0.1)'
+    'shadow': 'rgba(0, 0, 0, 0.08)',
 }
+
+# Feuille de style globale du dashboard
+DASHBOARD_STYLE = f"""
+    QWidget#dashboard_root {{
+        background-color: {COLORS['background']};
+    }}
+    QScrollArea {{
+        border: none;
+        background: transparent;
+    }}
+    QFrame#metrics_card {{
+        background-color: {COLORS['surface']};
+        border-radius: 12px;
+        border: 1px solid {COLORS['border']};
+        padding: 4px;
+    }}
+    QFrame#metrics_card:hover {{
+        border-color: {COLORS['primary_light']};
+        background-color: {COLORS['surface']};
+    }}
+    QFrame#chart_widget {{
+        background-color: {COLORS['surface']};
+        border-radius: 12px;
+        border: 1px solid {COLORS['border']};
+        padding: 12px;
+    }}
+    QFrame#section_title {{
+        background: transparent;
+        border: none;
+    }}
+    QPushButton {{
+        background-color: {COLORS['primary']};
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-weight: bold;
+    }}
+    QPushButton:hover {{
+        background-color: {COLORS['primary_dark']};
+    }}
+    QPushButton:pressed {{
+        background-color: {COLORS['primary_dark']};
+    }}
+    QComboBox {{
+        background-color: {COLORS['surface']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 8px;
+        padding: 6px 12px;
+        min-width: 140px;
+    }}
+    QComboBox:hover {{
+        border-color: {COLORS['primary_light']};
+    }}
+    QTableWidget {{
+        background-color: {COLORS['surface']};
+        border-radius: 8px;
+        border: 1px solid {COLORS['border']};
+        gridline-color: {COLORS['border']};
+    }}
+    QTableWidget::item {{
+        padding: 8px;
+    }}
+    QHeaderView::section {{
+        background-color: {COLORS['surface_variant']};
+        padding: 10px;
+        border: none;
+        border-bottom: 2px solid {COLORS['primary']};
+        font-weight: bold;
+    }}
+    QProgressBar {{
+        border: none;
+        border-radius: 4px;
+        background-color: {COLORS['surface_variant']};
+        text-align: center;
+    }}
+    QProgressBar::chunk {{
+        border-radius: 4px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 {COLORS['primary_light']}, stop:1 {COLORS['primary']});
+    }}
+"""
 
 class MetricsCard(QFrame):
     """Widget carte pour afficher une métrique avec design moderne"""
     
     def __init__(self, title, value, trend=None, color=COLORS['primary'], icon=None):
         super().__init__()
-        self.setFrameStyle(QFrame.NoFrame)
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['surface']},
-                    stop:1 {COLORS['surface_variant']});
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 20px;
-                margin: 8px;
-                box-shadow: 0 4px 12px {COLORS['shadow']};
-            }}
-            QLabel {{
-                border: none;
-                background: transparent;
-            }}
-        """)
+        self.setFrameStyle(QFrame.Shape.NoFrame)
+        self.setObjectName("metrics_card")
+        self._color = color
         
         layout = QVBoxLayout()
-        layout.setSpacing(12)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 14, 16, 14)
         
         # En-tête avec icône
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
+        header_layout.setSpacing(10)
         
-        # Icône colorée
         if icon:
             icon_label = QLabel()
-            icon_label.setPixmap(QPixmap(icon).scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            icon_label.setPixmap(QPixmap(icon).scaled(28, 28, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             header_layout.addWidget(icon_label)
         else:
-            # Cercle coloré par défaut
             color_indicator = QLabel()
-            color_indicator.setFixedSize(12, 12)
-            color_indicator.setStyleSheet(f"""
-                background-color: {color};
-                border-radius: 6px;
-                margin: 4px;
-            """)
+            color_indicator.setFixedSize(10, 10)
+            color_indicator.setStyleSheet(f"background-color: {color}; border-radius: 5px;")
             header_layout.addWidget(color_indicator)
         
         title_label = QLabel(title)
-        title_label.setFont(QFont("Segoe UI", 11, QFont.DemiBold))
-        title_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-weight: 600;")
+        title_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        title_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         
         layout.addLayout(header_layout)
         
-        # Valeur principale avec style amélioré
-        value_label = QLabel(str(value))
-        value_label.setFont(QFont("Segoe UI", 24, QFont.Bold))
-        value_label.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin: 8px 0;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        """)
-        layout.addWidget(value_label)
+        # Valeur principale — référence conservée pour mise à jour
+        self.value_label = QLabel(str(value))
+        self.value_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        self.value_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        layout.addWidget(self.value_label)
         
-        # Tendance avec indicateur visuel
         if trend:
             trend_layout = QHBoxLayout()
-            
-            # Indicateur de tendance
             trend_indicator = QLabel("↗" if trend.startswith("+") else "↘" if trend.startswith("-") else "→")
-            trend_color = COLORS['success'] if trend.startswith("+") else COLORS['error'] if trend.startswith("-") else COLORS['text_secondary']
-            trend_indicator.setFont(QFont("Segoe UI", 14))
-            trend_indicator.setStyleSheet(f"color: {trend_color};")
-            
             trend_label = QLabel(trend)
-            trend_label.setFont(QFont("Segoe UI", 10, QFont.Medium))
-            trend_label.setStyleSheet(f"color: {trend_color}; font-weight: 500;")
-            
+            trend_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
+            trend_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
             trend_layout.addWidget(trend_indicator)
             trend_layout.addWidget(trend_label)
             trend_layout.addStretch()
-            
             layout.addLayout(trend_layout)
         
         layout.addStretch()
         self.setLayout(layout)
-        self.setFixedHeight(140)
-        
-        # Effet hover
-        self.setObjectName("metrics_card")
+        self.setFixedHeight(130)
+    
+    def set_value(self, text):
+        """Met à jour la valeur affichée."""
+        self.value_label.setText(str(text))
 
 
 class ChartWidget(QFrame):
     """Widget graphique moderne avec design amélioré"""
     
-    def __init__(self, title, data, chart_type="bar"):
+    def __init__(self, title, data=None, chart_type="bar"):
         super().__init__()
-        self.setFrameStyle(QFrame.NoFrame)
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 20px;
-                margin: 8px;
-                box-shadow: 0 4px 12px {COLORS['shadow']};
-            }}
-        """)
+        self.setFrameStyle(QFrame.Shape.NoFrame)
+        self.setObjectName("chart_widget")
+        self._title = title
+        self._chart_type = chart_type
         
-        layout = QVBoxLayout()
-        layout.setSpacing(16)
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setSpacing(16)
+        self.main_layout.setContentsMargins(16, 14, 16, 14)
         
-        # En-tête du graphique avec style moderne
+        # En-tête du graphique
         header_layout = QHBoxLayout()
-        
-        title_label = QLabel(title)
-        title_label.setFont(QFont("Segoe UI", 14, QFont.DemiBold))
-        title_label.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin-bottom: 16px;
-            font-weight: 600;
-        """)
-        header_layout.addWidget(title_label)
+        self.title_label = QLabel(title)
+        self.title_label.setFont(QFont("Segoe UI", 14, QFont.Weight.DemiBold))
+        self.title_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        header_layout.addWidget(self.title_label)
         header_layout.addStretch()
+        self.count_badge = QLabel("0 éléments")
+        self.count_badge.setFont(QFont("Segoe UI", 9))
+        self.count_badge.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        header_layout.addWidget(self.count_badge)
+        self.main_layout.addLayout(header_layout)
         
-        # Badge de nombre d'éléments
-        count_badge = QLabel(f"{len(data)} éléments")
-        count_badge.setFont(QFont("Segoe UI", 9))
-        count_badge.setStyleSheet(f"""
-            background-color: {COLORS['primary_light']};
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-weight: 500;
-        """)
-        header_layout.addWidget(count_badge)
+        # Conteneur des barres (réutilisable)
+        self.chart_layout = QVBoxLayout()
+        self.chart_layout.setSpacing(8)
+        self.main_layout.addLayout(self.chart_layout)
+        self.main_layout.addStretch()
+        self.setLayout(self.main_layout)
         
-        layout.addLayout(header_layout)
+        self.update_data(data or {})
+    
+    def _format_value(self, value):
+        if abs(value) >= 1_000_000:
+            return f"{value/1_000_000:.1f} M"
+        if abs(value) >= 1_000:
+            return f"{value/1_000:.1f} K"
+        return f"{value:.0f}"
+    
+    def update_data(self, data):
+        """Met à jour les données sans recréer le widget."""
+        # Supprimer les anciens éléments du chart_layout
+        while self.chart_layout.count():
+            item = self.chart_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._clear_layout(item.layout())
         
-        # Zone de graphique avec barres améliorées
-        chart_layout = QVBoxLayout()
-        chart_layout.setSpacing(8)
+        self.count_badge.setText(f"{len(data)} élément(s)" if data else "0 élément")
         
         if data:
-            max_value = max(data.values()) if data.values() else 1
-            
+            max_value = max(abs(v) for v in data.values()) if data.values() else 1
             for i, (label, value) in enumerate(data.items()):
                 item_layout = QHBoxLayout()
                 item_layout.setSpacing(12)
                 
-                # Label avec numérotation
                 rank_label = QLabel(f"{i+1}")
                 rank_label.setFixedSize(24, 24)
-                rank_label.setAlignment(Qt.AlignCenter)
-                rank_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
-                rank_label.setStyleSheet(f"""
-                    background-color: {COLORS['primary']};
-                    color: white;
-                    border-radius: 12px;
-                    font-weight: 600;
-                """)
+                rank_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                rank_label.setStyleSheet(
+                    f"background-color: {COLORS['primary_light']}; color: white; "
+                    "border-radius: 12px; font-weight: bold;"
+                )
+                rank_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
                 item_layout.addWidget(rank_label)
                 
-                # Nom du client/période
                 label_widget = QLabel(str(label)[:25])
-                label_widget.setMinimumWidth(120)
-                label_widget.setFont(QFont("Segoe UI", 10, QFont.Medium))
-                label_widget.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: 500;")
+                label_widget.setMinimumWidth(100)
+                label_widget.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
                 item_layout.addWidget(label_widget)
-                
-                # Barre de progression moderne
-                progress_container = QFrame()
-                progress_container.setStyleSheet(f"""
-                    background-color: {COLORS['surface_variant']};
-                    border-radius: 8px;
-                    margin: 2px 0;
-                """)
-                progress_container.setFixedHeight(16)
                 
                 progress = QProgressBar()
                 progress.setMaximum(100)
-                progress.setValue(int((value / max_value) * 100) if max_value > 0 else 0)
+                progress.setValue(int((abs(value) / max_value) * 100) if max_value > 0 else 0)
                 progress.setTextVisible(False)
-                
-                # Couleur dégradée pour la barre
-                color_intensity = min(255, int(180 + (75 * (value / max_value))))
-                progress.setStyleSheet(f"""
-                    QProgressBar {{
-                        border: none;
-                        background-color: {COLORS['surface_variant']};
-                        border-radius: 8px;
-                        height: 16px;
-                    }}
-                    QProgressBar::chunk {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                            stop:0 {COLORS['primary']},
-                            stop:1 {COLORS['primary_light']});
-                        border-radius: 8px;
-                        margin: 0;
-                    }}
-                """)
+                progress.setFixedHeight(14)
                 item_layout.addWidget(progress, 2)
                 
-                # Valeur avec formatage amélioré
-                if abs(value) >= 1000000:
-                    display_value = f"{value/1000000:.1f}M"
-                elif abs(value) >= 1000:
-                    display_value = f"{value/1000:.1f}K"
-                else:
-                    display_value = f"{value:.0f}"
-                    
-                value_label = QLabel(display_value)
-                value_label.setMinimumWidth(60)
-                value_label.setAlignment(Qt.AlignRight)
-                value_label.setFont(QFont("Segoe UI", 10, QFont.DemiBold))
-                value_label.setStyleSheet(f"color: {COLORS['primary']}; font-weight: 600;")
+                value_label = QLabel(self._format_value(value))
+                value_label.setMinimumWidth(56)
+                value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+                value_label.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                value_label.setStyleSheet(f"color: {COLORS['text_primary']};")
                 item_layout.addWidget(value_label)
                 
-                chart_layout.addLayout(item_layout)
+                self.chart_layout.addLayout(item_layout)
         else:
-            # Message quand pas de données
             no_data_label = QLabel("📊 Aucune donnée disponible")
-            no_data_label.setAlignment(Qt.AlignCenter)
+            no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             no_data_label.setFont(QFont("Segoe UI", 12))
-            no_data_label.setStyleSheet(f"""
-                color: {COLORS['text_secondary']};
-                padding: 40px;
-                border: 2px dashed {COLORS['border']};
-                border-radius: 12px;
-                background-color: {COLORS['surface_variant']};
-            """)
-            chart_layout.addWidget(no_data_label)
-        
-        layout.addLayout(chart_layout)
-        layout.addStretch()
-        self.setLayout(layout)
+            no_data_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+            self.chart_layout.addWidget(no_data_label)
+    
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._clear_layout(item.layout())
 
 
 class TopClientsWidget(QTableWidget):
@@ -299,56 +310,16 @@ class TopClientsWidget(QTableWidget):
         self.setHorizontalHeaderLabels(["👤 Client", "📊 Paiements", "💰 Crédit", "⚖️ Balance"])
         
         # Style moderne du tableau
-        self.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 12px;
-                gridline-color: {COLORS['border']};
-                selection-background-color: {COLORS['primary_light']};
-                font-family: "Segoe UI";
-                font-size: 10px;
-            }}
-            QHeaderView::section {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['primary']},
-                    stop:1 {COLORS['primary_dark']});
-                color: white;
-                border: none;
-                padding: 12px 8px;
-                font-weight: 600;
-                font-size: 11px;
-                text-align: left;
-            }}
-            QHeaderView::section:first {{
-                border-top-left-radius: 12px;
-            }}
-            QHeaderView::section:last {{
-                border-top-right-radius: 12px;
-            }}
-            QTableWidget::item {{
-                padding: 12px 8px;
-                border-bottom: 1px solid {COLORS['surface_variant']};
-                font-size: 10px;
-            }}
-            QTableWidget::item:selected {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-            }}
-            QTableWidget::item:hover {{
-                background-color: {COLORS['surface_variant']};
-            }}
-        """)
         
         # Configuration du tableau
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         
         self.setAlternatingRowColors(True)
-        self.setSelectionBehavior(QTableWidget.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
         self.setShowGrid(False)
 
@@ -545,17 +516,12 @@ class DashboardWidget(FWidget):
     
     def init_ui(self):
         """Initialise l'interface utilisateur moderne"""
+        self.setObjectName("dashboard_root")
+        self.setStyleSheet(DASHBOARD_STYLE)
+        
         main_layout = QVBoxLayout()
         main_layout.setSpacing(16)
         main_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Définir le style de fond pour le widget principal
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLORS['background']};
-                font-family: "Segoe UI", "Arial", sans-serif;
-            }}
-        """)
         
         # En-tête moderne du tableau de bord
         header_layout = QHBoxLayout()
@@ -571,26 +537,12 @@ class DashboardWidget(FWidget):
         title_section.addWidget(dashboard_icon)
         
         title_label = QLabel("Tableau de Bord MPayments")
-        title_label.setFont(QFont("Segoe UI", 20, QFont.Bold))
-        title_label.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin: 0;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        """)
+        title_label.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
         title_section.addWidget(title_label)
         
         # Badge de statut en temps réel
         status_badge = QLabel("🟢 En ligne")
-        status_badge.setFont(QFont("Segoe UI", 10, QFont.Medium))
-        status_badge.setStyleSheet(f"""
-            background-color: {COLORS['success_light']};
-            color: white;
-            padding: 6px 12px;
-            border-radius: 15px;
-            font-weight: 500;
-            margin-left: 12px;
-        """)
+        status_badge.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
         title_section.addWidget(status_badge)
         
         header_layout.addLayout(title_section)
@@ -605,114 +557,26 @@ class DashboardWidget(FWidget):
         period_combo.addItems(["Aujourd'hui", "Cette semaine", "Ce mois", "6 derniers mois", "Cette année"])
         period_combo.setCurrentText("Ce mois")
         period_combo.currentTextChanged.connect(self.on_period_changed)
-        period_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 8px 12px;
-                min-width: 140px;
-                font-size: 11px;
-                font-weight: 500;
-                color: {COLORS['text_primary']};
-            }}
-            QComboBox:hover {{
-                border-color: {COLORS['primary_light']};
-            }}
-            QComboBox:focus {{
-                border-color: {COLORS['primary']};
-            }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 20px;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid {COLORS['text_secondary']};
-                margin-right: 5px;
-            }}
-        """)
         controls_layout.addWidget(period_combo)
         
         # Bouton de rafraîchissement avec design moderne
-        refresh_btn = QPushButton("🔄 Actualiser")
-        refresh_btn.clicked.connect(self.refresh_data)
-        refresh_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['primary']},
-                    stop:1 {COLORS['primary_dark']});
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-weight: 600;
-                font-size: 11px;
-                min-width: 120px;
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {COLORS['primary_light']},
-                    stop:1 {COLORS['primary']});
-                transform: translateY(-1px);
-            }}
-            QPushButton:pressed {{
-                background: {COLORS['primary_dark']};
-                transform: translateY(0px);
-            }}
-        """)
-        controls_layout.addWidget(refresh_btn)
+        self.refresh_btn = QPushButton("🔄 Actualiser")
+        self.refresh_btn.clicked.connect(self.refresh_data)
+        controls_layout.addWidget(self.refresh_btn)
         
         header_layout.addLayout(controls_layout)
         main_layout.addLayout(header_layout)
         
         # Ligne de séparation moderne
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {COLORS['primary_light']},
-                    stop:0.5 {COLORS['primary']},
-                    stop:1 {COLORS['primary_light']});
-                border: none;
-                height: 2px;
-                margin: 8px 0;
-            }}
-        """)
+        separator.setFrameShape(QFrame.Shape.HLine)
         main_layout.addWidget(separator)
         
         # Zone de défilement avec style moderne
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet(f"""
-            QScrollArea {{
-                border: none;
-                background-color: transparent;
-            }}
-            QScrollBar:vertical {{
-                background-color: {COLORS['surface_variant']};
-                width: 12px;
-                border-radius: 6px;
-                margin: 0;
-            }}
-            QScrollBar::handle:vertical {{
-                background-color: {COLORS['primary_light']};
-                border-radius: 6px;
-                min-height: 30px;
-                margin: 2px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background-color: {COLORS['primary']};
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0;
-            }}
-        """)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
         content_widget = QWidget()
         content_layout = QVBoxLayout()
@@ -720,22 +584,13 @@ class DashboardWidget(FWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         
         # Section des métriques principales avec titre moderne
-        metrics_title = QLabel("📈 Métriques Principales")
-        metrics_title.setFont(QFont("Segoe UI", 16, QFont.DemiBold))
-        metrics_title.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin: 16px 0 8px 0;
-            font-weight: 600;
-        """)
+        metrics_title = QLabel("📈 Métriques principales")
+        metrics_title.setObjectName("section_title")
+        metrics_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        metrics_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
         content_layout.addWidget(metrics_title)
         
         metrics_group = QFrame()
-        metrics_group.setStyleSheet(f"""
-            QFrame {{
-                background-color: transparent;
-                border: none;
-            }}
-        """)
         
         metrics_layout = QGridLayout()
         metrics_layout.setSpacing(16)
@@ -755,49 +610,33 @@ class DashboardWidget(FWidget):
         content_layout.addWidget(metrics_group)
         
         # Section des graphiques avec titre moderne
-        charts_title = QLabel("📊 Analyse des Tendances")
-        charts_title.setFont(QFont("Segoe UI", 16, QFont.DemiBold))
-        charts_title.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin: 16px 0 8px 0;
-            font-weight: 600;
-        """)
+        charts_title = QLabel("📊 Analyse des tendances")
+        charts_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        charts_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
         content_layout.addWidget(charts_title)
         
         charts_container = QFrame()
-        charts_container.setStyleSheet("QFrame { background-color: transparent; border: none; }")
+        charts_container.setObjectName("chart_widget")
         charts_layout = QHBoxLayout()
-        charts_layout.setSpacing(16)
+        charts_layout.setSpacing(20)
+        charts_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.monthly_chart = ChartWidget("Évolution Mensuelle", {})
-        self.top_clients_chart = ChartWidget("Top Clients par Balance", {})
+        self.monthly_chart = ChartWidget("Évolution mensuelle (balance)", {})
+        self.top_clients_chart = ChartWidget("Top 5 clients (balance)", {})
         
-        charts_layout.addWidget(self.monthly_chart)
-        charts_layout.addWidget(self.top_clients_chart)
+        charts_layout.addWidget(self.monthly_chart, 1)
+        charts_layout.addWidget(self.top_clients_chart, 1)
         
         charts_container.setLayout(charts_layout)
         content_layout.addWidget(charts_container)
         
         # Section du top clients avec titre moderne
-        clients_title = QLabel("🏆 Top 10 Clients")
-        clients_title.setFont(QFont("Segoe UI", 16, QFont.DemiBold))
-        clients_title.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin: 16px 0 8px 0;
-            font-weight: 600;
-        """)
+        clients_title = QLabel("🏆 Top 10 clients")
+        clients_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        clients_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
         content_layout.addWidget(clients_title)
         
         clients_container = QFrame()
-        clients_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 0;
-                margin: 8px;
-            }}
-        """)
         clients_layout = QVBoxLayout()
         clients_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -808,38 +647,20 @@ class DashboardWidget(FWidget):
         content_layout.addWidget(clients_container)
         
         # Informations système avec design moderne
-        system_title = QLabel("ℹ️ Informations Système")
-        system_title.setFont(QFont("Segoe UI", 16, QFont.DemiBold))
-        system_title.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            margin: 16px 0 8px 0;
-            font-weight: 600;
-        """)
+        system_title = QLabel("ℹ️ Informations système")
+        system_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        system_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
         content_layout.addWidget(system_title)
         
         system_container = QFrame()
-        system_container.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {COLORS['surface']},
-                    stop:1 {COLORS['surface_variant']});
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 20px;
-                margin: 8px;
-            }}
-        """)
+        system_container.setObjectName("chart_widget")
         system_layout = QVBoxLayout()
+        system_layout.setContentsMargins(16, 12, 16, 12)
         
-        self.system_info = QLabel("🔄 Chargement des informations système...")
+        self.system_info = QLabel("🔄 Chargement des informations...")
         self.system_info.setFont(QFont("Segoe UI", 11))
-        self.system_info.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            background-color: transparent;
-            border: none;
-            padding: 0;
-            line-height: 24px;
-        """)
+        self.system_info.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.system_info.setWordWrap(True)
         system_layout.addWidget(self.system_info)
         
         system_container.setLayout(system_layout)
@@ -861,9 +682,20 @@ class DashboardWidget(FWidget):
         if self.update_thread and self.update_thread.isRunning():
             return
         
+        if hasattr(self, 'refresh_btn'):
+            self.refresh_btn.setEnabled(False)
+            self.refresh_btn.setText("⏳ Actualisation...")
+        
         self.update_thread = DataUpdateThread()
-        self.update_thread.data_updated.connect(self.update_display)
+        self.update_thread.data_updated.connect(self._on_data_updated)
         self.update_thread.start()
+    
+    def _on_data_updated(self, data):
+        """Réactive le bouton puis met à jour l'affichage."""
+        if hasattr(self, 'refresh_btn'):
+            self.refresh_btn.setEnabled(True)
+            self.refresh_btn.setText("🔄 Actualiser")
+        self.update_display(data)
     
     def update_display(self, data):
         """Met à jour l'affichage avec les nouvelles données"""
@@ -872,82 +704,41 @@ class DashboardWidget(FWidget):
         self.data = data
         
         try:
-            # Mise à jour des cartes de métriques avec protection contre les erreurs
+            # Mise à jour des cartes de métriques via set_value (référence stable)
             try:
-                # Clients card
-                clients_labels = self.clients_card.findChildren(QLabel)
-                if len(clients_labels) >= 3:
-                    clients_labels[0].setText("👥 Clients")
-                    clients_labels[2].setText(str(data.get('clients_count', 0)))
-                
-                # Payments card
-                payments_labels = self.payments_card.findChildren(QLabel)
-                if len(payments_labels) >= 3:
-                    payments_labels[2].setText(str(data.get('total_payments', 0)))
-                
-                # Credit card
-                credit_labels = self.credit_card.findChildren(QLabel)
-                if len(credit_labels) >= 3:
-                    total_credit = data.get('total_credit', 0)
-                    credit_labels[2].setText(device_amount(total_credit))
-                
-                # Balance card
-                balance_labels = self.balance_card.findChildren(QLabel)
-                if len(balance_labels) >= 3:
-                    balance = data.get('balance_total', 0)
-                    balance_labels[2].setText(device_amount(balance))
-                    
+                self.clients_card.set_value(data.get('clients_count', 0))
+                self.payments_card.set_value(data.get('total_payments', 0))
+                self.credit_card.set_value(device_amount(data.get('total_credit', 0)))
+                balance = data.get('balance_total', 0)
+                self.balance_card.set_value(device_amount(balance))
             except Exception as e:
                 logger.error(f"Erreur lors de la mise à jour des cartes: {e}")
             
-            # Mise à jour des graphiques avec protection contre les erreurs
+            # Mise à jour des graphiques sans recréer les widgets
             try:
-                # Préparation des données mensuelles
-                monthly_data = {}
                 monthly_stats = data.get('monthly_stats', {})
-                
+                monthly_data = {}
                 if monthly_stats:
                     for month, stats in monthly_stats.items():
-                        if isinstance(stats, dict):
-                            monthly_data[month] = stats.get('balance', 0)
-                        else:
-                            monthly_data[month] = 0
+                        monthly_data[month] = stats.get('balance', 0) if isinstance(stats, dict) else 0
                 else:
-                    # Données par défaut si aucune donnée n'est disponible
                     for i in range(6):
-                        month_date = date.today() - timedelta(days=30*i)
+                        month_date = date.today() - timedelta(days=30 * i)
                         monthly_data[month_date.strftime("%b %Y")] = 0
                 
-                # Recréer le graphique mensuel
-                charts_layout = self.monthly_chart.parent().layout()
-                if charts_layout:
-                    charts_layout.removeWidget(self.monthly_chart)
-                    self.monthly_chart.deleteLater()
-                    self.monthly_chart = ChartWidget("Évolution Mensuelle (Balance)", monthly_data)
-                    charts_layout.insertWidget(0, self.monthly_chart)
+                self.monthly_chart.update_data(monthly_data)
                 
-                # Top clients pour graphique
-                top_clients_data = {}
                 top_clients = data.get('top_clients', [])
-                
+                top_clients_data = {}
                 if top_clients:
                     for client in top_clients[:5]:
                         if isinstance(client, dict):
                             balance = client.get('credit', 0) - client.get('debit', 0)
-                            name = client.get('name', 'Inconnu')[:15]
-                            top_clients_data[name] = balance
-                        else:
-                            logger.warning(f"Format de client inattendu: {client}")
+                            top_clients_data[client.get('name', 'Inconnu')[:15]] = balance
                 else:
                     top_clients_data["Aucun client"] = 0
                 
-                # Recréer le graphique des top clients
-                if charts_layout:
-                    charts_layout.removeWidget(self.top_clients_chart)
-                    self.top_clients_chart.deleteLater()
-                    self.top_clients_chart = ChartWidget("Top 5 Clients (Balance)", top_clients_data)
-                    charts_layout.addWidget(self.top_clients_chart)
-                    
+                self.top_clients_chart.update_data(top_clients_data)
             except Exception as e:
                 logger.error(f"Erreur lors de la mise à jour des graphiques: {e}")
             
@@ -968,13 +759,14 @@ class DashboardWidget(FWidget):
                 total_debit = data.get('total_debit', 0)
                 balance_total = data.get('balance_total', 0)
                 
-                system_text = f"""🕒 Dernière mise à jour: {now}
-                                👥 Clients: {clients_count:,} | 🏢 Fournisseurs: {providers_count:,}
-                                💳 Total paiements: {total_payments:,}
-                                💰 Crédits: {device_amount(total_credit)} | 💸 Débits: {device_amount(total_debit)}
-                                ⚖️ Balance générale: {device_amount(balance_total)}"""
-                
-                self.system_info.setText(system_text.strip())
+                system_text = (
+                    f"🕒 Dernière mise à jour : {now}\n"
+                    f"👥 Clients : {clients_count:,}  |  🏢 Fournisseurs : {providers_count:,}\n"
+                    f"💳 Total paiements : {total_payments:,}\n"
+                    f"💰 Crédits : {device_amount(total_credit)}  |  💸 Débits : {device_amount(total_debit)}\n"
+                    f"⚖️ Balance générale : {device_amount(balance_total)}"
+                )
+                self.system_info.setText(system_text)
                 
             except Exception as e:
                 logger.error(f"Erreur lors de la mise à jour des informations système: {e}")

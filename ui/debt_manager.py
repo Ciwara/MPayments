@@ -13,10 +13,11 @@ from Common.ui.util import is_float
 from configuration import Config
 from data_helper import device_amount
 from models import Payment, ProviderOrClient
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QFont, QIcon, QPixmap
-from PyQt5.QtWidgets import (QGridLayout, QHBoxLayout, QListWidget,
-                             QListWidgetItem, QMenu, QSplitter, QFrame, QVBoxLayout, QLabel)
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QShortcut, QKeySequence
+from PyQt6.QtWidgets import (QGridLayout, QHBoxLayout, QListWidget,
+                             QListWidgetItem, QMenu, QSplitter, QFrame, QVBoxLayout, QLabel,
+                             QAbstractItemView, QHeaderView, QComboBox)
 from ui.payment_edit_add import EditOrAddPaymentrDialog
 from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
 
@@ -107,12 +108,6 @@ class DebtsViewWidget(FWidget):
         logger.debug("Titre de la fenêtre défini")
 
         # Style moderne pour le widget principal - SIMPLIFIÉ
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLORS['background']};
-                font-family: "Segoe UI", "Arial", sans-serif;
-            }}
-        """)
 
         # Optimisation de la mise en cache des données
         self._cached_data = {}
@@ -124,33 +119,12 @@ class DebtsViewWidget(FWidget):
 
         # Configuration moderne des labels - SIMPLIFIÉ
         self.label_balance = QLabel("")
-        self.label_balance.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        self.label_balance.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['primary']};
-                color: white;
-                border-radius: 12px;
-                padding: 16px 24px;
-                margin: 8px 0;
-                font-weight: bold;
-            }}
-        """)
-        self.label_balance.setFixedHeight(60)
+        # self.label_balance.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        # self.label_balance.setFixedHeight(60)
         
         self.label_owner = QLabel("")
-        self.label_owner.setFont(QFont("Segoe UI", 12, QFont.DemiBold))
-        self.label_owner.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['surface']};
-                color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 12px 16px;
-                margin: 4px 0;
-                font-weight: bold;
-            }}
-        """)
-        self.label_owner.setFixedHeight(50)
+        # self.label_owner.setFont(QFont("Segoe UI", 12, QFont.DemiBold))
+        # self.label_owner.setFixedHeight(50)
 
         # Configuration optimisée de la table avec style moderne
         if Config.CISS:
@@ -162,270 +136,83 @@ class DebtsViewWidget(FWidget):
         
         # Table des fournisseurs/clients avec style moderne  
         self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
-        self.table_provid_clt.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 12px;
-                padding: 8px;
-                font-family: "Segoe UI";
-                font-size: 11px;
-                alternate-background-color: {COLORS['surface_variant']};
-            }}
-            QListWidget::item {{
-                padding: 8px 12px;
-                border-bottom: 1px solid {COLORS['surface_variant']};
-                border-radius: 6px;
-                margin: 2px 0;
-            }}
-            QListWidget::item:selected {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-            }}
-            QListWidget::item:hover {{
-                background-color: {COLORS['surface_variant']};
-            }}
-        """)
         logger.debug("Table des fournisseurs/clients initialisée avec style moderne")
 
-        # Champ de recherche moderne - SIMPLIFIÉ
+        # Filtre par type de compte (Clients / Fournisseurs / Tous)
+        self.type_filter_combo = QComboBox()
+        self.type_filter_combo.addItems(["Clients", "Fournisseurs", "Tous"])
+        self.type_filter_combo.currentTextChanged.connect(self._on_type_filter_changed)
+        logger.debug("Filtre par type configuré")
+
+        # Champ de recherche avec placeholder
         self.search_field = LineEdit()
+        self.search_field.setPlaceholderText("Rechercher par nom ou téléphone...")
         self.search_field.textChanged.connect(self.search)
-        self.search_field.setPlaceholderText("🔍 Rechercher un compte...")
-        self.search_field.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 12px;
-                padding: 12px 16px;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-                font-weight: normal;
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['primary']};
-            }}
-        """)
-        self.search_field.setFixedHeight(45)
-        logger.debug("Champ de recherche configuré avec style moderne")
+        logger.debug("Champ de recherche configuré")
+
+        # Indicateur du nombre de résultats
+        self.search_count_label = QLabel("0 compte(s)")
+        self.search_count_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        logger.debug("Label nombre de résultats configuré")
+
+        # Raccourci clavier Nouveau compte
+        QShortcut(QKeySequence("Ctrl+N"), self, self.add_prov_or_clt)
 
         # Configuration optimisée des boutons d'action - SIMPLIFIÉ
         self.add_btt = Button("💰 Créditer")
         self.add_btt.setEnabled(False)
         self.add_btt.clicked.connect(self.add_payment)
-        self.add_btt.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['success']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
-                font-size: 12px;
-                min-width: 180px;
-                min-height: 40px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['success_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['success']};
-            }}
-            QPushButton:disabled {{
-                background-color: {COLORS['border']};
-                color: {COLORS['text_secondary']};
-            }}
-        """)
         logger.debug("Bouton d'ajout configuré avec style moderne")
 
         self.sub_btt = Button("💸 Débiter")
         self.sub_btt.setEnabled(False)
         self.sub_btt.clicked.connect(self.sub_payment)
-        self.sub_btt.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['error']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
-                font-size: 12px;
-                min-width: 180px;
-                min-height: 40px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['error_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['error']};
-            }}
-            QPushButton:disabled {{
-                background-color: {COLORS['border']};
-                color: {COLORS['text_secondary']};
-            }}
-        """)
         logger.debug("Bouton de soustraction configuré avec style moderne")
 
         self.add_prov_btt = Button("➕ Nouveau Compte")
         self.add_prov_btt.clicked.connect(self.add_prov_or_clt)
-        self.add_prov_btt.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['primary']};
-                color: white;
-                border: none;
-                border-radius: 12px;
-                padding: 16px 24px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 280px;
-                min-height: 50px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['primary_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['primary_dark']};
-            }}
-        """)
         logger.debug("Bouton d'ajout de compte configuré avec style moderne")
 
         # Boutons d'export modernes - SIMPLIFIÉ
         self.button = Button("🔄")
         self.button.clicked.connect(self.refresh_period)
-        self.button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['info']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 12px;
-                font-weight: bold;
-                font-size: 11px;
-                min-width: 40px;
-                min-height: 35px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['info_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['info']};
-            }}
-        """)
 
         self.btt_pdf_export = Button("📄")
         self.btt_pdf_export.clicked.connect(self.export_pdf)
-        self.btt_pdf_export.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['error']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 12px;
-                font-weight: bold;
-                font-size: 11px;
-                min-width: 40px;
-                min-height: 35px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['error_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['error']};
-            }}
-        """)
         
         self.btt_xlsx_export = Button("📊")
         self.btt_xlsx_export.clicked.connect(self.export_xlsx)
-        self.btt_xlsx_export.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['success']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 12px;
-                font-weight: bold;
-                font-size: 11px;
-                min-width: 40px;
-                min-height: 35px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['success_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['success']};
-            }}
-        """)
         logger.debug("Boutons d'export configurés avec style moderne")
 
-        # Conteneurs modernes pour l'organisation - SIMPLIFIÉ
-        # Conteneur de gauche avec titre
+        # Conteneurs modernes pour l'organisation
         left_container = QFrame()
-        left_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 16px;
-                margin: 8px;
-            }}
-        """)
-        
-        left_title = QLabel("👥 Comptes Clients")
-        left_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        left_title.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['text_primary']};
-                margin-bottom: 12px;
-                font-weight: bold;
-                border: none;
-                background: transparent;
-            }}
-        """)
-        
+        left_container.setObjectName("accounts_panel")
+        left_title = QLabel("👥 Comptes")
+        left_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        left_title.setStyleSheet(f"color: {COLORS['text_primary']};")
+
         left_layout = QVBoxLayout()
-        left_layout.setSpacing(12)
+        left_layout.setSpacing(10)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(left_title)
+        type_label = QLabel("Afficher :")
+        type_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        left_layout.addWidget(type_label)
+        left_layout.addWidget(self.type_filter_combo)
         left_layout.addWidget(self.search_field)
+        left_layout.addWidget(self.search_count_label)
         left_layout.addWidget(self.table_provid_clt)
         left_layout.addWidget(self.add_prov_btt)
         left_container.setLayout(left_layout)
 
         # Conteneur de droite avec titre
         right_container = QFrame()
-        right_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 16px;
-                padding: 16px;
-                margin: 8px;
-            }}
-        """)
         
         right_title = QLabel("💳 Gestion des Mouvements")
-        right_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        right_title.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['text_primary']};
-                margin-bottom: 12px;
-                font-weight: bold;
-                border: none;
-                background: transparent;
-            }}
-        """)
+        right_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
 
         # Zone de contrôles modernes
         controls_container = QFrame()
-        controls_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['surface_variant']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 12px;
-                padding: 16px;
-                margin: 8px 0;
-            }}
-        """)
         
         controls_layout = QGridLayout()
         controls_layout.setSpacing(12)
@@ -447,15 +234,6 @@ class DebtsViewWidget(FWidget):
 
         # Table des mouvements dans un conteneur
         table_container = QFrame()
-        table_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: transparent;
-                border: none;
-                border-radius: 12px;
-                padding: 0;
-                margin: 8px 0;
-            }}
-        """)
         table_layout = QVBoxLayout()
         table_layout.setContentsMargins(0, 0, 0, 0)
         table_layout.addWidget(self.table)
@@ -463,7 +241,6 @@ class DebtsViewWidget(FWidget):
 
         # Balance dans un conteneur centré
         balance_container = QFrame()
-        balance_container.setStyleSheet("QFrame { background-color: transparent; border: none; }")
         balance_layout = QHBoxLayout()
         balance_layout.addStretch()
         balance_layout.addWidget(self.label_balance)
@@ -481,17 +258,8 @@ class DebtsViewWidget(FWidget):
         right_container.setLayout(right_layout)
 
         # Splitter principal moderne - SIMPLIFIÉ
-        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_splitter.setHandleWidth(3)
-        main_splitter.setStyleSheet(f"""
-            QSplitter::handle {{
-                background-color: {COLORS['border']};
-                border-radius: 1px;
-            }}
-            QSplitter::handle:hover {{
-                background-color: {COLORS['primary_light']};
-            }}
-        """)
         main_splitter.addWidget(left_container)
         main_splitter.addWidget(right_container)
         main_splitter.setSizes([350, 850])  # Proportion initiale
@@ -502,7 +270,8 @@ class DebtsViewWidget(FWidget):
         main_layout.setContentsMargins(16, 16, 16, 16)
         main_layout.addWidget(main_splitter)
         self.setLayout(main_layout)
-        
+
+        self.update_accounts_count()
         logger.debug("DebtsViewWidget initialisé avec succès - Design moderne appliqué")
 
     def refresh_period(self):
@@ -519,19 +288,31 @@ class DebtsViewWidget(FWidget):
         else:
             logger.debug("Utilisation des données en cache")
 
+    def _on_type_filter_changed(self, _text):
+        """Recharge la liste selon le type (Clients / Fournisseurs / Tous)."""
+        self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
+        self.update_accounts_count()
+
+    def update_accounts_count(self):
+        """Met à jour le label du nombre de comptes affichés."""
+        table = getattr(self, "table_provid_clt", None)
+        label = getattr(self, "search_count_label", None)
+        if table is None or label is None:
+            return
+        n = max(0, table.count() - 1)  # -1 pour la ligne "TOUS"
+        label.setText(f"{n} compte(s)")
+
     def search(self):
-        """Recherche optimisée avec debounce"""
+        """Recherche avec mise à jour du nombre de résultats."""
         search_text = self.search_field.text()
         logger.debug(f"Recherche avec le texte: {search_text}")
-        
-        # Utiliser la mise en cache pour les recherches fréquentes
+
         if search_text in self._cached_data:
-            logger.debug("Utilisation des résultats en cache")
-            self.table_provid_clt.refresh_(self._cached_data[search_text])
+            self.table_provid_clt.refresh_(provid_clt=search_text.strip() or None)
         else:
-            self.table_provid_clt.refresh_(search_text)
+            self.table_provid_clt.refresh_(provid_clt=search_text.strip() or None)
             self._cached_data[search_text] = search_text
-            logger.debug("Nouvelle recherche effectuée")
+        self.update_accounts_count()
 
     def add_prov_or_clt(self):
         logger.debug("Ouverture du dialogue d'ajout de compte")
@@ -596,11 +377,24 @@ class ProviderOrClientTableWidget(QListWidget):
         self.setAutoScroll(True)
         # self.setAutoFillBackground(True)
         self.itemSelectionChanged.connect(self.handleClicked)
+        self.itemDoubleClicked.connect(self._on_double_click)
         self.refresh_()
-        # self.setStyleSheet("QListWidget::item { border-bottom: 1px; }")
 
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
+
+    def _on_double_click(self, item):
+        """Double-clic sur un compte : ouvrir l'édition."""
+        if not isinstance(item, ProviderOrClientQListWidgetItem):
+            return
+        if isinstance(item.provid_clt, str):
+            return
+        self.parent.open_dialog(
+            EditOrAddClientOrProviderDialog,
+            modal=True,
+            prov_clt=item.provid_clt,
+            table_p=self,
+        )
 
     def popup(self, pos):
         from ui.deleteview_cpt import DeleteViewWidget
@@ -608,14 +402,15 @@ class ProviderOrClientTableWidget(QListWidget):
         row = self.selectionModel().selection().indexes()[0].row()
         if row < 1:
             return
+        item = self.item(row)
+        if not isinstance(item, ProviderOrClientQListWidgetItem) or isinstance(item.provid_clt, str):
+            return
+        provid_clt = item.provid_clt
         menu = QMenu()
         editaction = menu.addAction("Modifier l'info.")
         delaction = menu.addAction("Supprimer ce compte")
-        action = menu.exec_(self.mapToGlobal(pos))
+        action = menu.exec(self.mapToGlobal(pos))
 
-        provid_clt = ProviderOrClient.get(
-            ProviderOrClient.name == self.item(row).text()
-        )
         if action == editaction:
             self.parent.open_dialog(
                 EditOrAddClientOrProviderDialog,
@@ -623,24 +418,36 @@ class ProviderOrClientTableWidget(QListWidget):
                 prov_clt=provid_clt,
                 table_p=self,
             )
-        if action == delaction:
+        elif action == delaction:
             self.parent.open_dialog(
                 DeleteViewWidget, modal=True, table_p=self, obj=provid_clt
             )
 
     def refresh_(self, provid_clt=None):
-        """Rafraichir la liste des provid_cltes"""
-
+        """Rafraîchir la liste des comptes (clients/fournisseurs) selon le filtre et la recherche."""
         self.clear()
         self.addItem(ProviderOrClientQListWidgetItem(ALL_CONTACTS))
-        qs = ProviderOrClient.select().where(
-            ProviderOrClient.type_ == ProviderOrClient.CLT,
-            ProviderOrClient.deleted == False,
-        )
+
+        type_filter = "Clients"
+        if hasattr(self.parent, "type_filter_combo"):
+            type_filter = self.parent.type_filter_combo.currentText()
+
+        qs = ProviderOrClient.select().where(ProviderOrClient.deleted == False)
+        if type_filter == "Clients":
+            qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.CLT)
+        elif type_filter == "Fournisseurs":
+            qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR)
+        # "Tous" : pas de filtre sur le type
+
         if provid_clt:
-            qs = qs.where(ProviderOrClient.name.contains(provid_clt))
-        for provid_clt in qs:
-            self.addItem(ProviderOrClientQListWidgetItem(provid_clt))
+            search = str(provid_clt).strip()
+            if search:
+                qs = qs.where(ProviderOrClient.name.contains(search))
+        for p in qs.order_by(ProviderOrClient.name):
+            self.addItem(ProviderOrClientQListWidgetItem(p))
+
+        if hasattr(self.parent, "update_accounts_count"):
+            self.parent.update_accounts_count()
 
     def handleClicked(self):
         self.parent.btt_xlsx_export.setEnabled(False)
@@ -676,8 +483,8 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
                         else Config.img_cmedia + "user_active"
                     )
                 ),
-                QIcon.Normal,
-                QIcon.Off,
+                QIcon.Mode.Normal,
+                QIcon.State.Off,
             )
 
         self.setIcon(icon)
@@ -685,13 +492,14 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
 
     def init_text(self):
         try:
-            self.setText(self.provid_clt.name)
+            solde = self.provid_clt.last_remaining()
+            montant = device_amount(solde, self.provid_clt)
+            self.setText(f"{self.provid_clt.name} — {montant}")
         except AttributeError:
             font = QFont()
             font.setBold(True)
             self.setFont(font)
-            self.setTextAlignment(Qt.AlignCenter)
-
+            self.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if not Config.DEVISE_PEP_PROV:
                 self.setText("Tous")
 
@@ -717,41 +525,8 @@ class RapportTableWidget(FTableWidget):
         ]
         
         # Style moderne pour le tableau standard - SIMPLIFIÉ
-        self.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {COLORS['surface']};
-                border: none;
-                border-radius: 0;
-                gridline-color: {COLORS['border']};
-                selection-background-color: {COLORS['primary_light']};
-                font-family: "Segoe UI";
-                font-size: 10px;
-                alternate-background-color: {COLORS['surface_variant']};
-            }}
-            QHeaderView::section {{
-                background-color: {COLORS['primary']};
-                color: white;
-                border: none;
-                padding: 12px 8px;
-                font-weight: bold;
-                font-size: 11px;
-                text-align: left;
-            }}
-            QTableWidget::item {{
-                padding: 10px 8px;
-                border-bottom: 1px solid {COLORS['surface_variant']};
-                font-size: 10px;
-            }}
-            QTableWidget::item:selected {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-            }}
-            QTableWidget::item:hover {{
-                background-color: {COLORS['surface_variant']};
-            }}
-        """)
         
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
 
         self.parent = parent
@@ -765,18 +540,19 @@ class RapportTableWidget(FTableWidget):
         # Configuration moderne du tableau
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, header.ResizeToContents)
-        header.setSectionResizeMode(1, header.Stretch)
-        header.setSectionResizeMode(2, header.ResizeToContents)
-        header.setSectionResizeMode(3, header.ResizeToContents)
-        header.setSectionResizeMode(4, header.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
         self.setAlternatingRowColors(True)
-        self.setSelectionBehavior(self.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
         self.setShowGrid(True)
         
         self.label_mov_tt = "-"
+        self.provider_clt = None
 
     def refresh_(self, provid_clt_id=None, search=None):
         """Rafraîchissement avec calculs améliorés"""
@@ -811,10 +587,10 @@ class RapportTableWidget(FTableWidget):
         if isinstance(provid_clt_id, int):
             self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
             qs = qs.select().where(Payment.provider_clt == self.provider_clt)
-            msg = "<h3>Compte : {}</h3> <h4>Tel: {}</h4>".format(
-                self.provider_clt.name, self.provider_clt.phone
-            )
-            logger.debug(f"Filtre sur le client: {self.provider_clt.name}")
+            solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
+            tel = self.provider_clt.phone or "—"
+            msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
+            logger.debug(f"Filtre sur le compte: {self.provider_clt.name}")
         else:
             self.provider_clt = "Tous"
             try:
@@ -848,7 +624,7 @@ class RapportTableWidget(FTableWidget):
         menu = QMenu()
         editaction = menu.addAction("Modifier cette ligne")
         delaction = menu.addAction("Supprimer cette ligne")
-        action = menu.exec_(self.mapToGlobal(pos))
+        action = menu.exec(self.mapToGlobal(pos))
         row = self.selectionModel().selection().indexes()[0].row()
         payment = Payment.get(id=self.data[row][-1])
         if action == editaction:
@@ -963,41 +739,8 @@ class RapportCISSTableWidget(FTableWidget):
         ]
         
         # Style moderne pour le tableau CISS - SIMPLIFIÉ
-        self.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {COLORS['surface']};
-                border: none;
-                border-radius: 0;
-                gridline-color: {COLORS['border']};
-                selection-background-color: {COLORS['primary_light']};
-                font-family: "Segoe UI";
-                font-size: 10px;
-                alternate-background-color: {COLORS['surface_variant']};
-            }}
-            QHeaderView::section {{
-                background-color: {COLORS['primary']};
-                color: white;
-                border: none;
-                padding: 12px 8px;
-                font-weight: bold;
-                font-size: 11px;
-                text-align: left;
-            }}
-            QTableWidget::item {{
-                padding: 10px 8px;
-                border-bottom: 1px solid {COLORS['surface_variant']};
-                font-size: 10px;
-            }}
-            QTableWidget::item:selected {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-            }}
-            QTableWidget::item:hover {{
-                background-color: {COLORS['surface_variant']};
-            }}
-        """)
         
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.popup)
 
         self.parent = parent
@@ -1010,17 +753,18 @@ class RapportCISSTableWidget(FTableWidget):
         # Configuration moderne du tableau
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, header.ResizeToContents)
-        header.setSectionResizeMode(1, header.Stretch)
-        header.setSectionResizeMode(2, header.ResizeToContents)
-        header.setSectionResizeMode(3, header.ResizeToContents)
-        header.setSectionResizeMode(4, header.ResizeToContents)
-        header.setSectionResizeMode(5, header.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         
         self.setAlternatingRowColors(True)
-        self.setSelectionBehavior(self.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
         self.setShowGrid(True)
+        self.provider_clt = None
 
     def refresh_(self, provid_clt_id=None, search=None):
         """Rafraîchissement avec calculs améliorés pour CISS"""
@@ -1106,7 +850,7 @@ class RapportCISSTableWidget(FTableWidget):
         menu = QMenu()
         editaction = menu.addAction("Modifier cette ligne")
         delaction = menu.addAction("Supprimer cette ligne")
-        action = menu.exec_(self.mapToGlobal(pos))
+        action = menu.exec(self.mapToGlobal(pos))
         row = self.selectionModel().selection().indexes()[0].row()
         payment = Payment.get(id=self.data[row][-1])
         if action == editaction:

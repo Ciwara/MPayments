@@ -3,7 +3,7 @@
 # maintainer: Fad
 from __future__ import unicode_literals, absolute_import, division, print_function
 
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGridLayout, QDialog
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QGridLayout, QDialog
 
 
 from Common.ui.common import FWidget, FPageTitle, Button, FLabel

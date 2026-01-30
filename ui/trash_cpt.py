@@ -18,15 +18,20 @@ from Common.ui.util import is_float
 from configuration import Config
 from data_helper import device_amount
 from models import Payment, ProviderOrClient
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QFont, QIcon, QPixmap
-from PyQt5.QtWidgets import (
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
+    QVBoxLayout,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QSplitter,
+    QComboBox,
+    QLabel,
+    QMessageBox,
+    QFrame,
 )
 from ui.payment_edit_add import EditOrAddPaymentrDialog
 from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
@@ -80,34 +85,6 @@ class DebtsTrashViewWidget(FWidget):
         logger.debug("Titre de la fenêtre défini avec style moderne")
 
         # Style moderne pour le widget principal
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLORS['background']};
-                font-family: "Segoe UI", "Arial", sans-serif;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-            }}
-            QLabel {{
-                background-color: {COLORS['surface']};
-                color: {COLORS['text_primary']};
-                font-weight: 500;
-                font-size: 12px;
-                padding: 8px 12px;
-                border-radius: 8px;
-                border: 1px solid {COLORS['border']};
-            }}
-            QSplitter {{
-                background-color: {COLORS['background']};
-            }}
-            QSplitter::handle {{
-                background-color: {COLORS['border']};
-                width: 3px;
-                height: 3px;
-            }}
-            QSplitter::handle:hover {{
-                background-color: {COLORS['primary_light']};
-            }}
-        """)
 
         self.title = "🗑️ Mouvements supprimés"
         self.now = datetime.now().strftime(Config.DATEFORMAT)
@@ -115,31 +92,8 @@ class DebtsTrashViewWidget(FWidget):
 
         # Labels modernes avec style amélioré
         self.label_balance = FormLabel("")
-        self.label_balance.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['surface']};
-                color: {COLORS['primary']};
-                font-weight: 700;
-                font-size: 14px;
-                padding: 16px 20px;
-                border-radius: 12px;
-                border: 2px solid {COLORS['primary_light']};
-                margin: 8px 0;
-            }}
-        """)
         
         self.label_owner = FormLabel("")
-        self.label_owner.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['info_light']};
-                color: white;
-                font-weight: 600;
-                font-size: 13px;
-                padding: 12px 16px;
-                border-radius: 8px;
-                margin: 4px 0;
-            }}
-        """)
 
         if Config.CISS:
             logger.debug("Configuration CISS activée")
@@ -148,91 +102,32 @@ class DebtsTrashViewWidget(FWidget):
             logger.debug("Configuration CISS désactivée")
             self.table = RapportTableWidget(parent=self)
 
-        # Bouton de rafraîchissement moderne
+        # Filtre par type (Clients / Fournisseurs / Tous)
+        self.type_filter_combo = QComboBox()
+        self.type_filter_combo.addItems(["Clients", "Fournisseurs", "Tous"])
+        self.type_filter_combo.currentTextChanged.connect(self._on_type_filter_changed)
+
+        # Champ de recherche
+        self.search_field = LineEdit()
+        self.search_field.setPlaceholderText("Rechercher par nom...")
+        self.search_field.textChanged.connect(self.search)
+
+        self.search_count_label = QLabel("0 compte(s) en corbeille")
+        self.search_count_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+
+        # Boutons d'action
         self.button = Button("🔄 Actualiser")
         self.button.clicked.connect(self.refresh_period)
-        self.button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['info']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-weight: 600;
-                font-size: 12px;
-                min-height: 40px;
-                margin: 4px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['info_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['info']};
-            }}
-        """)
-        logger.debug("Bouton de rafraîchissement configuré avec style moderne")
 
-        # Bouton de suppression définitive moderne
         self.add_btt = Button("🗑️ Supprimer définitivement")
         self.add_btt.setEnabled(False)
-        self.add_btt.clicked.connect(self.suppression)
+        self.add_btt.clicked.connect(self._confirm_suppression)
         self.add_btt.setMaximumHeight(90)
-        self.add_btt.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['error']};
-                color: white;
-                border: none;
-                border-radius: 12px;
-                padding: 16px 24px;
-                font-weight: 700;
-                font-size: 12px;
-                min-width: 180px;
-                min-height: 60px;
-                margin: 4px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['error_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['error']};
-            }}
-            QPushButton:disabled {{
-                background-color: {COLORS['surface_variant']};
-                color: {COLORS['text_secondary']};
-            }}
-        """)
-        logger.debug("Bouton de suppression configuré avec style moderne")
 
-        # Bouton de restauration moderne
         self.sub_btt = Button("♻️ Restaurer")
         self.sub_btt.setEnabled(False)
         self.sub_btt.clicked.connect(self.restoration)
         self.sub_btt.setMaximumHeight(90)
-        self.sub_btt.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['success']};
-                color: white;
-                border: none;
-                border-radius: 12px;
-                padding: 16px 24px;
-                font-weight: 700;
-                font-size: 12px;
-                min-width: 140px;
-                min-height: 60px;
-                margin: 4px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['success_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['success']};
-            }}
-            QPushButton:disabled {{
-                background-color: {COLORS['surface_variant']};
-                color: {COLORS['text_secondary']};
-            }}
-        """)
-        logger.debug("Bouton de restauration configuré avec style moderne")
 
         editbox = QGridLayout()
         editbox.addWidget(self.label_owner, 0, 0)
@@ -241,55 +136,41 @@ class DebtsTrashViewWidget(FWidget):
         editbox.addWidget(self.add_btt, 0, 4)
         editbox.setSpacing(12)
         editbox.setContentsMargins(16, 8, 16, 8)
-        logger.debug("Mise en page principale configurée avec espacement moderne")
 
         self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
-        logger.debug("Table des fournisseurs/clients initialisée")
 
-        # Champ de recherche moderne
-        self.search_field = LineEdit()
-        self.search_field.textChanged.connect(self.search)
-        self.search_field.setPlaceholderText("🔍 Rechercher un compte...")
-        self.search_field.setMaximumHeight(40)
-        self.search_field.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 20px;
-                padding: 12px 20px;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-                font-weight: 500;
-                min-height: 16px;
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['primary']};
-                background-color: {COLORS['surface']};
-            }}
-            QLineEdit:hover {{
-                border-color: {COLORS['primary_light']};
-            }}
-            QLineEdit::placeholder {{
-                color: {COLORS['text_secondary']};
-                font-style: italic;
-            }}
-        """)
-        logger.debug("Champ de recherche configuré avec style moderne")
+        # Panneau gauche : filtre, recherche, liste
+        left_panel = QFrame()
+        left_panel.setObjectName("trash_panel")
+        left_layout = QVBoxLayout()
+        left_layout.setSpacing(10)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        title_left = QLabel("🗑️ Comptes en corbeille")
+        title_left.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        title_left.setStyleSheet(f"color: {COLORS['text_primary']};")
+        left_layout.addWidget(title_left)
+        type_label = QLabel("Afficher :")
+        type_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        left_layout.addWidget(type_label)
+        left_layout.addWidget(self.type_filter_combo)
+        left_layout.addWidget(self.search_field)
+        left_layout.addWidget(self.search_count_label)
+        left_layout.addWidget(self.table_provid_clt)
+        left_panel.setLayout(left_layout)
 
-        self.splt_add = QSplitter(Qt.Horizontal)
+        self.splt_add = QSplitter(Qt.Orientation.Horizontal)
         self.splt_add.setLayout(editbox)
 
-        self.splitter_left = QSplitter(Qt.Vertical)
-        self.splitter_left.addWidget(self.search_field)
-        self.splitter_left.addWidget(self.table_provid_clt)
+        self.splitter_left = QSplitter(Qt.Orientation.Vertical)
+        self.splitter_left.addWidget(left_panel)
 
-        self.splt_clt = QSplitter(Qt.Vertical)
+        self.splt_clt = QSplitter(Qt.Orientation.Vertical)
         self.splt_clt.addWidget(self.splt_add)
         self.splt_clt.addWidget(self.table)
         self.splt_clt.addWidget(self.label_balance)
         logger.debug("Splitters configurés")
 
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.splitter_left)
         splitter.addWidget(self.splt_clt)
 
@@ -300,40 +181,83 @@ class DebtsTrashViewWidget(FWidget):
         hbox.setContentsMargins(16, 16, 16, 16)
         hbox.addWidget(splitter)
         self.setLayout(hbox)
-        logger.debug("Mise en page finale configurée avec design moderne")
+
+        self.update_accounts_count()
+        logger.debug("Mise en page Poubelle configurée")
 
     def refresh_period(self):
         logger.debug("Rafraîchissement de la période")
         self.table.refresh_()
+        self.update_accounts_count()
+
+    def _on_type_filter_changed(self, _text):
+        self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
+        self.update_accounts_count()
+
+    def update_accounts_count(self):
+        table = getattr(self, "table_provid_clt", None)
+        label = getattr(self, "search_count_label", None)
+        if table is None or label is None:
+            return
+        n = max(0, table.count() - 1)
+        label.setText(f"{n} compte(s) en corbeille")
 
     def search(self):
         search_text = self.search_field.text()
-        logger.debug(f"Recherche avec le texte: {search_text}")
-        self.table_provid_clt.refresh_(search_text)
+        self.table_provid_clt.refresh_(provid_clt=search_text.strip() or None)
+        self.update_accounts_count()
+
+    def _confirm_suppression(self):
+        """Demande confirmation avant suppression définitive."""
+        provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
+        if not isinstance(provid_clt_id, int):
+            return
+        try:
+            account = ProviderOrClient.get(id=provid_clt_id)
+            reply = QMessageBox.question(
+                self,
+                "⚠️ Suppression définitive",
+                f"Supprimer définitivement le compte « {account.name} » ?\n\n"
+                "Cette action est irréversible (compte et paiements associés).",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.suppression()
+        except Exception as e:
+            logger.error(f"Erreur: {e}")
+            self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
 
     def suppression(self):
-        provid_clt_id = self.table_provid_clt.provid_clt_id
+        provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
+        if not isinstance(provid_clt_id, int):
+            return
         logger.debug(f"Suppression définitive du compte ID: {provid_clt_id}")
         try:
             ProviderOrClient.get(id=provid_clt_id).delete_permanate()
-            self.table_provid_clt.refresh_()
-            self.parent.Notify("✅ Compte supprimé définitivement avec succès", "success")
-            logger.debug("Compte supprimé définitivement avec succès")
+            self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
+            self.update_accounts_count()
+            self.table.refresh_()
+            self.parent.Notify("✅ Compte supprimé définitivement", "success")
         except Exception as e:
             logger.error(f"Erreur lors de la suppression définitive: {str(e)}")
-            self.parent.Notify(f"❌ Erreur lors de la suppression: {str(e)}", "error")
+            self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
 
     def restoration(self):
-        provid_clt_id = self.table_provid_clt.provid_clt_id
+        provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
+        if not isinstance(provid_clt_id, int):
+            return
         logger.debug(f"Restauration du compte ID: {provid_clt_id}")
         try:
-            ProviderOrClient.get(id=provid_clt_id).restore_data()
-            self.table_provid_clt.refresh_()
-            self.parent.Notify("♻️ Compte restauré avec succès", "success")
-            logger.debug("Compte restauré avec succès")
+            account = ProviderOrClient.get(id=provid_clt_id)
+            account.restore_data()
+            self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
+            self.update_accounts_count()
+            self.table.refresh_()
+            self.parent.Notify(f"♻️ Compte « {account.name} » restauré", "success")
         except Exception as e:
             logger.error(f"Erreur lors de la restauration: {str(e)}")
-            self.parent.Notify(f"❌ Erreur lors de la restauration: {str(e)}", "error")
+            self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
 
     def display_balance(self, amount_text):
         logger.debug(f"Affichage du solde avec style moderne: {amount_text}")
@@ -351,86 +275,53 @@ class DebtsTrashViewWidget(FWidget):
 
 class ProviderOrClientTableWidget(QListWidget):
 
-    """Affiche la liste des fournisseurs/clients supprimés avec style moderne"""
+    """Affiche la liste des comptes (clients/fournisseurs) en corbeille."""
 
     def __init__(self, parent, *args, **kwargs):
-        logger.debug("Initialisation de ProviderOrClientTableWidget avec design moderne")
         super(ProviderOrClientTableWidget, self).__init__(parent)
-
         self.parent = parent
         self.setAutoScroll(True)
         self.itemSelectionChanged.connect(self.handleClicked)
-        
-        # Style moderne pour la liste
-        self.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {COLORS['surface']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 12px;
-                padding: 8px;
-                font-size: 12px;
-                color: {COLORS['text_primary']};
-                selection-background-color: {COLORS['primary_light']};
-                alternate-background-color: {COLORS['surface_variant']};
-            }}
-            QListWidget::item {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 6px;
-                padding: 8px 12px;
-                margin: 2px;
-                font-weight: 500;
-            }}
-            QListWidget::item:hover {{
-                background-color: {COLORS['primary_light']};
-                color: white;
-                border-color: {COLORS['primary']};
-            }}
-            QListWidget::item:selected {{
-                background-color: {COLORS['primary']};
-                color: white;
-                border-color: {COLORS['primary_dark']};
-                font-weight: 600;
-            }}
-            QScrollBar:vertical {{
-                background-color: {COLORS['surface_variant']};
-                width: 12px;
-                border-radius: 6px;
-                margin: 0;
-            }}
-            QScrollBar::handle:vertical {{
-                background-color: {COLORS['border']};
-                border-radius: 6px;
-                min-height: 30px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background-color: {COLORS['primary_light']};
-            }}
-        """)
-        
+        self.itemDoubleClicked.connect(self._on_double_click)
         self.refresh_()
-        logger.debug("Table des fournisseurs/clients initialisée avec style moderne")
+
+    def _on_double_click(self, item):
+        """Double-clic : restaurer le compte."""
+        if not isinstance(item, ProviderOrClientQListWidgetItem) or isinstance(item.provid_clt, str):
+            return
+        self.parent.restoration()
 
     def refresh_(self, provid_clt=None):
-        """Rafraichir la liste des fournisseurs/clients supprimés"""
-        logger.debug("Rafraîchissement de la liste des fournisseurs/clients")
+        """Rafraîchir la liste des comptes en corbeille (deleted=True)."""
         self.clear()
         self.addItem(ProviderOrClientQListWidgetItem(ALL_CONTACTS))
-        qs = ProviderOrClient.select().where(
-            ProviderOrClient.type_ == ProviderOrClient.CLT,
-            ProviderOrClient.deleted == True,
-        )
+
+        type_filter = "Clients"
+        if hasattr(self.parent, "type_filter_combo"):
+            type_filter = self.parent.type_filter_combo.currentText()
+
+        qs = ProviderOrClient.select().where(ProviderOrClient.deleted == True)
+        if type_filter == "Clients":
+            qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.CLT)
+        elif type_filter == "Fournisseurs":
+            qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR)
+
         if provid_clt:
-            logger.debug(f"Filtrage avec le texte: {provid_clt}")
-            qs = qs.where(ProviderOrClient.name.contains(provid_clt))
-        for provid_clt in qs:
-            self.addItem(ProviderOrClientQListWidgetItem(provid_clt))
-        logger.debug(f"Nombre d'éléments chargés: {self.count()}")
+            search = str(provid_clt).strip()
+            if search:
+                qs = qs.where(ProviderOrClient.name.contains(search))
+        for p in qs.order_by(ProviderOrClient.name):
+            self.addItem(ProviderOrClientQListWidgetItem(p))
+
+        if hasattr(self.parent, "update_accounts_count"):
+            self.parent.update_accounts_count()
 
     def handleClicked(self):
-        self.provid_clt = self.currentItem()
-        self.provid_clt_id = self.provid_clt.provid_clt_id
-        logger.debug(f"Élément sélectionné - ID: {self.provid_clt_id}")
+        item = self.currentItem()
+        if item is None:
+            return
+        self.provid_clt = item
+        self.provid_clt_id = item.provid_clt_id
 
         if isinstance(self.provid_clt_id, int):
             self.parent.sub_btt.setEnabled(True)
@@ -462,30 +353,25 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
                 else Config.img_cmedia + "user_active"
             )
             logger.debug(f"Chargement de l'icône: {icon_path}")
-            icon.addPixmap(QPixmap(icon_path), QIcon.Normal, QIcon.Off)
+            icon.addPixmap(QPixmap(icon_path), QIcon.Mode.Normal, QIcon.State.Off)
 
         self.setIcon(icon)
         self.init_text()
 
     def init_text(self):
         try:
-            # Ajout d'une icône selon l'état
-            if self.provid_clt.is_indebted():
-                text = f"⚠️ {self.provid_clt.name}"
-            else:
-                text = f"👤 {self.provid_clt.name}"
-            self.setText(text)
-            logger.debug(f"Texte défini avec icône: {text}")
+            solde = self.provid_clt.last_remaining()
+            montant = device_amount(solde, self.provid_clt)
+            prefix = "⚠️ " if self.provid_clt.is_indebted() else "👤 "
+            self.setText(f"{prefix}{self.provid_clt.name} — {montant}")
         except AttributeError:
             font = QFont()
             font.setBold(True)
             font.setPointSize(13)
             self.setFont(font)
-            self.setTextAlignment(Qt.AlignCenter)
-
+            self.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if not Config.DEVISE_PEP_PROV:
                 self.setText("📋 Tous les comptes")
-                logger.debug("Texte par défaut défini avec style: 'Tous les comptes'")
 
     @property
     def provid_clt_id(self):
@@ -499,7 +385,7 @@ class RapportTableWidget(FTableWidget):
     def __init__(self, parent, *args, **kwargs):
         FTableWidget.__init__(self, parent=parent, *args, **kwargs)
 
-        self.hheaders = ["Date", "Libelle opération", "Débit", "Crédit", "Solde", ""]
+        self.hheaders = ["📅 Date", "📝 Libellé", "💸 Débit", "💰 Crédit", "📊 Solde", ""]
         self.parent = parent
 
         self.sorter = False
@@ -507,6 +393,7 @@ class RapportTableWidget(FTableWidget):
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r"}
         self.ecart = -15
         self.display_vheaders = False
+        self.provider_clt = None
 
     def refresh_(self, provid_clt_id=None, search=None):
         """ """
@@ -527,22 +414,31 @@ class RapportTableWidget(FTableWidget):
     def set_data_for(self, provid_clt_id=None, search=None):
         self.provid_clt_id = provid_clt_id
         qs = (
-            Payment.select().where(Payment.status == False).order_by(Payment.date.asc())
+            Payment.select()
+            .where(Payment.deleted == True)
+            .order_by(Payment.date.asc())
         )
 
         self.remaining = 0
         if isinstance(provid_clt_id, int):
-            self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
-            qs = qs.select().where(Payment.provider_clt == self.provider_clt)
-            msg = "<h3>Compte : {}</h3> <h4>Tel: {}</h4>".format(
-                self.provider_clt.name, self.provider_clt.phone
-            )
+            try:
+                self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
+            except ProviderOrClient.DoesNotExist:
+                self.provider_clt = "Tous"
+                self.provid_clt_id = None
+                self.data = []
+                self.parent.label_owner.setText("<h3>Compte introuvable (supprimé définitivement ?)</h3>")
+                if hasattr(self.parent, "table_provid_clt"):
+                    self.parent.table_provid_clt.refresh_(
+                        provid_clt=self.parent.search_field.text().strip() or None
+                    )
+                return
+            qs = qs.where(Payment.provider_clt == self.provider_clt)
+            solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
+            tel = self.provider_clt.phone or "—"
+            msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
         else:
             self.provider_clt = "Tous"
-            for prov in ProviderOrClient.select().where(
-                ProviderOrClient.type_ == ProviderOrClient.CLT
-            ):
-                self.remaining += prov.last_remaining()
             msg = self.provider_clt
         self.parent.label_owner.setText(msg)
 
@@ -583,6 +479,8 @@ class RapportTableWidget(FTableWidget):
 
     def dict_data(self):
         title = "Movements"
+        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
+        client_id = getattr(self.provider_clt, 'id', None) if hasattr(self.provider_clt, 'id') else None
         return {
             "file_name": title,
             "headers": self.hheaders[:-1],
@@ -602,13 +500,13 @@ class RapportTableWidget(FTableWidget):
             "exclude_row": len(self.data) - 1,
             "date": self.parent.now,
             "others": [
-                ("A7", "C7", "Compte : {}".format(self.provider_clt)),
+                ("A7", "C7", "Compte : {}".format(client_name)),
                 (
                     "A8",
                     "B8",
                     "Solde au {}: {}".format(
                         self.parent.now,
-                        device_amount(self.balance_tt, self.provider_clt.id),
+                        device_amount(self.balance_tt, client_id),
                     ),
                 ),
             ],
@@ -634,6 +532,7 @@ class RapportCISSTableWidget(FTableWidget):
         self.stretch_columns = [0, 1, 2, 3, 4, 5]
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r", 5: "r"}
         self.display_vheaders = False
+        self.provider_clt = None
 
     def refresh_(self, provid_clt_id=None, search=None):
         """ """
@@ -653,22 +552,31 @@ class RapportCISSTableWidget(FTableWidget):
     def set_data_for(self, provid_clt_id=None, search=None):
         self.provid_clt_id = provid_clt_id
         qs = (
-            Payment.select().where(Payment.status == False).order_by(Payment.date.asc())
+            Payment.select()
+            .where(Payment.deleted == True)
+            .order_by(Payment.date.asc())
         )
 
         self.remaining = 0
         if isinstance(provid_clt_id, int):
-            self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
-            qs = qs.select().where(Payment.provider_clt == self.provider_clt)
-            msg = "<h3>Compte : {}</h3> <h4>Tel: {}</h4>".format(
-                self.provider_clt.name, self.provider_clt.phone
-            )
+            try:
+                self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
+            except ProviderOrClient.DoesNotExist:
+                self.provider_clt = "Tous"
+                self.provid_clt_id = None
+                self.data = []
+                self.parent.label_owner.setText("<h3>Compte introuvable (supprimé définitivement ?)</h3>")
+                if hasattr(self.parent, "table_provid_clt"):
+                    self.parent.table_provid_clt.refresh_(
+                        provid_clt=self.parent.search_field.text().strip() or None
+                    )
+                return
+            qs = qs.where(Payment.provider_clt == self.provider_clt)
+            solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
+            tel = self.provider_clt.phone or "—"
+            msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
         else:
             self.provider_clt = "Tous"
-            for prov in ProviderOrClient.select().where(
-                ProviderOrClient.type_ == ProviderOrClient.CLT
-            ):
-                self.remaining += prov.last_remaining()
             msg = self.provider_clt
         self.parent.label_owner.setText(msg)
 
@@ -717,6 +625,8 @@ class RapportCISSTableWidget(FTableWidget):
 
     def dict_data(self):
         title = "Movements"
+        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
+        client_id = getattr(self.provider_clt, 'id', None) if hasattr(self.provider_clt, 'id') else None
         return {
             "file_name": title,
             "headers": self.hheaders[:-1],
@@ -737,13 +647,13 @@ class RapportCISSTableWidget(FTableWidget):
             "exclude_row": len(self.data) - 1,
             "date": self.parent.now,
             "others": [
-                ("A5", "C7", "Compte : {}".format(self.provider_clt)),
+                ("A5", "C7", "Compte : {}".format(client_name)),
                 (
                     "A6",
                     "B6",
                     "Solde au {}: {}".format(
                         self.parent.now,
-                        device_amount(self.balance_tt, self.provider_clt),
+                        device_amount(self.balance_tt, client_id),
                     ),
                 ),
             ],

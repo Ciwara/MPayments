@@ -3,8 +3,8 @@
 # maintainer: Fad
 from __future__ import unicode_literals, absolute_import, division, print_function
 
-from PyQt5.QtCore import QDate
-from PyQt5.QtWidgets import (
+from PyQt6.QtCore import QDate
+from PyQt6.QtWidgets import (
     QVBoxLayout,
     QComboBox,
     QFormLayout,

@@ -5,9 +5,9 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from PyQt5.QtWidgets import QDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QLabel
-from PyQt5.QtGui import QFont, QPixmap, QIcon
-from PyQt5.QtCore import Qt
+from PyQt6.QtWidgets import QDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QLabel
+from PyQt6.QtGui import QFont, QPixmap, QIcon
+from PyQt6.QtCore import Qt
 
 from Common.ui.common import Button, FLabel, FPageTitle, FWidget
 
@@ -52,20 +52,7 @@ class DeleteViewWidget(QDialog, FWidget):
 
         self.setWindowTitle("⚠️ Confirmation de suppression")
         
-        # Style moderne pour la fenêtre de dialogue
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {COLORS['background']};
-                font-family: "Segoe UI", "Arial", sans-serif;
-                font-size: 12px;
-            }}
-            QLabel {{
-                color: {COLORS['text_primary']};
-                font-weight: 500;
-                font-size: 12px;
-                padding: 4px 0;
-            }}
-        """)
+        # Style moderne pour la fenêtre de dialogue supprimé
         
         # Dimensions modernes
         self.setMinimumSize(400, 250)
@@ -93,54 +80,20 @@ class DeleteViewWidget(QDialog, FWidget):
         
         # Titre principal avec icône d'avertissement
         title_container = QLabel()
-        title_container.setAlignment(Qt.AlignCenter)
-        title_container.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['error_light']};
-                color: white;
-                font-weight: 700;
-                font-size: 16px;
-                padding: 16px 20px;
-                border-radius: 12px;
-                margin-bottom: 16px;
-            }}
-        """)
+        title_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_container.setText("⚠️ ATTENTION - Suppression définitive")
         vbox.addWidget(title_container)
         
         # Zone d'information avec le compte
         info_container = QLabel()
-        info_container.setAlignment(Qt.AlignCenter)
-        info_container.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['surface']};
-                color: {COLORS['text_primary']};
-                font-weight: 600;
-                font-size: 14px;
-                padding: 20px;
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                margin: 8px 0;
-            }}
-        """)
+        info_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_container.setText(self.title)
         vbox.addWidget(info_container)
         
         # Message d'avertissement
         warning_text = QLabel()
-        warning_text.setAlignment(Qt.AlignCenter)
+        warning_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         warning_text.setWordWrap(True)
-        warning_text.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['text_secondary']};
-                font-weight: 500;
-                font-size: 12px;
-                padding: 16px;
-                background-color: {COLORS['warning_light']};
-                border-radius: 8px;
-                margin: 8px 0;
-            }}
-        """)
         warning_text.setText(
             "⚠️ Cette action est irréversible.\n"
             "Êtes-vous sûr de vouloir supprimer cet élément ?"
@@ -154,50 +107,11 @@ class DeleteViewWidget(QDialog, FWidget):
 
         # Bouton annuler (style sécurisé)
         cancel_button = Button("❌ Annuler")
-        cancel_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['surface']};
-                color: {COLORS['text_primary']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-weight: 600;
-                font-size: 12px;
-                min-width: 120px;
-                min-height: 40px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['surface_variant']};
-                border-color: {COLORS['primary_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['surface']};
-            }}
-        """)
         cancel_button.clicked.connect(self.cancel)
         button_container.addWidget(cancel_button)
         
         # Bouton supprimer (style d'avertissement)
         delete_button = Button("🗑️ Supprimer")
-        delete_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['error']};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-weight: 700;
-                font-size: 12px;
-                min-width: 120px;
-                min-height: 40px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['error_light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['error']};
-            }}
-        """)
         delete_button.clicked.connect(self.delete)
         button_container.addWidget(delete_button)
         
