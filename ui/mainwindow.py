@@ -8,7 +8,7 @@ from configuration import Config
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QToolBar
-from ui.dashboard import DashboardWidget
+from ui.debt_manager import DebtsViewWidget
 from ui.menubar import MenuBar
 from ui.menutoolbar import MenuToolBar
 
@@ -35,7 +35,7 @@ class MainWindow(FMainWindow):
         self.apply_saved_theme()
 
         # Changement vers le contexte initial
-        self.change_context(DashboardWidget)
+        self.change_context(DebtsViewWidget)
 
     def refresh_menu_after_login(self):
         """

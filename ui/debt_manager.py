@@ -104,7 +104,7 @@ def calculate_running_balance(payments_data):
 
 
 class DebtsViewWidget(FWidget):
-    """Shows the home page"""
+    """Shows the debts view page"""
 
     def __init__(self, parent=0, *args, **kwargs):
         logger.debug("Initialisation de DebtsViewWidget avec design moderne")
@@ -120,7 +120,7 @@ class DebtsViewWidget(FWidget):
         self._cached_data = {}
         self._last_refresh = None
         
-        self.title = "Movements"
+        self.title = "Gestion des dettes"
         self.now = datetime.now().strftime(Config.DATEFORMAT)
         logger.debug(f"Date actuelle: {self.now}")
 
