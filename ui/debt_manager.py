@@ -457,9 +457,18 @@ class ProviderOrClientTableWidget(QListWidget):
             self.parent.update_accounts_count()
 
     def handleClicked(self):
-        self.parent.btt_xlsx_export.setEnabled(False)
+        # Peut être déclenché sans item courant (ex: refresh/clear en cours)
+        if hasattr(self.parent, "btt_xlsx_export"):
+            self.parent.btt_xlsx_export.setEnabled(False)
+
         self.provid_clt = self.currentItem()
-        self.provid_clt_id = self.provid_clt.provid_clt_id
+        if self.provid_clt is None:
+            self.provid_clt_id = None
+            self.parent.sub_btt.setEnabled(False)
+            self.parent.add_btt.setEnabled(False)
+            return
+
+        self.provid_clt_id = getattr(self.provid_clt, "provid_clt_id", None)
 
         if isinstance(self.provid_clt_id, int):
             self.parent.sub_btt.setEnabled(True)
@@ -470,7 +479,8 @@ class ProviderOrClientTableWidget(QListWidget):
                 return
             self.parent.sub_btt.setEnabled(False)
             self.parent.add_btt.setEnabled(False)
-        self.parent.table.refresh_(provid_clt_id=self.provid_clt_id)
+        if self.provid_clt_id is not None:
+            self.parent.table.refresh_(provid_clt_id=self.provid_clt_id)
 
 
 class ProviderOrClientQListWidgetItem(QListWidgetItem):
