@@ -19,7 +19,6 @@ class MenuBar(FMenuBar, FWidget):
         self.setWindowIcon(QIcon(QPixmap("{}".format(Config.APP_LOGO))))
         self.parent = parent
 
-        from ui.statistics import StatisticsViewWidget
         from ui.trash_cpt import DebtsTrashViewWidget
         from ui.debt_manager import DebtsViewWidget
         from ui.dashboard import DashboardWidget
@@ -31,13 +30,6 @@ class MenuBar(FMenuBar, FWidget):
                 "admin": False,
                 "shortcut": "Ctrl+D",
                 "goto": DashboardWidget,
-            },
-            {
-                "name": "Statistiques",
-                "icon": "state",
-                "admin": False,
-                "shortcut": "Ctrl+S",
-                "goto": StatisticsViewWidget,
             },
             {
                 "name": "G. comptes",

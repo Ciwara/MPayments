@@ -15,7 +15,6 @@ class MenuToolBar(FMenuToolBar, FWidget):
     def __init__(self, parent=None, *args, **kwargs):
         FMenuToolBar.__init__(self, parent, *args, **kwargs)
 
-        from ui.statistics import StatisticsViewWidget
         from ui.trash_cpt import DebtsTrashViewWidget
         from ui.debt_manager import DebtsViewWidget
         from ui.dashboard import DashboardWidget
@@ -27,13 +26,6 @@ class MenuToolBar(FMenuToolBar, FWidget):
                 "admin": False,
                 "shortcut": "Ctrl+D",
                 "goto": DashboardWidget,
-            },
-            {
-                "name": "Statistiques",
-                "icon": "state",
-                "admin": False,
-                "shortcut": "Ctrl+S",
-                "goto": StatisticsViewWidget,
             },
             {
                 "name": "G. comptes",

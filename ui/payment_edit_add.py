@@ -13,8 +13,9 @@ from configuration import Config
 
 from Common.ui.util import check_is_empty, date_to_datetime
 from Common.ui.common import FWidget, ButtonSave, FormLabel, FloatLineEdit, FormatDate
+from Common.models import Owner
 
-from models import Payment
+from models import Payment, ProviderOrClient
 
 # Configuration du logger
 logging.basicConfig(
@@ -49,8 +50,8 @@ COLORS = {
 }
 
 try:
-    unicode
-except:
+    unicode  # type: ignore[name-defined]
+except NameError:
     unicode = str
 
 
@@ -193,9 +194,30 @@ class EditOrAddPaymentrDialog(QDialog, FWidget):
         payment = self.payment
         payment.type_ = self.type_
         payment.libelle = libelle
+        # Sécurité FK: un paiement doit avoir un owner (utilisateur)
+        try:
+            owner = Owner.get(Owner.is_identified)
+        except Exception:
+            try:
+                owner = Owner.select().first()
+            except Exception:
+                owner = None
+        if owner is None:
+            logger.error("Aucun utilisateur (Owner) disponible pour enregistrer ce paiement")
+            self.parent.Notify(
+                "Aucun utilisateur actif trouvé. Veuillez créer/activer un utilisateur avant d'enregistrer un mouvement.",
+                "error",
+            )
+            return
+        payment.owner = owner
         
         if self.new:
             payment.date = date_to_datetime(payment_date)
+            # Sécurité FK: un paiement doit être rattaché à un compte précis
+            if not isinstance(getattr(self.table_p, "provider_clt", None), ProviderOrClient):
+                logger.error("Aucun compte sélectionné pour ce paiement (provider_clt invalide)")
+                self.parent.Notify("Veuillez sélectionner un compte (client/fournisseur) avant d'ajouter un mouvement.", "error")
+                return
             payment.provider_clt = self.table_p.provider_clt
             
         if self.type_ == Payment.CREDIT:

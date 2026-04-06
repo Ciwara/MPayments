@@ -208,7 +208,7 @@ def test_statistics_module():
     
     try:
         # Import du module
-        from ui.statistics import safe_float, precise_calculation, calculate_running_balance
+        from ui.debt_manager import safe_float, precise_calculation, calculate_running_balance
         
         # Vérifier que les fonctions existent et fonctionnent
         test_result = safe_float("123,45")

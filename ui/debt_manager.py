@@ -3,8 +3,15 @@
 # maintainer: Fadiga
 
 import logging
+import sys
+from pathlib import Path
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
+
+# Racine du projet dans sys.path si on exécute ce fichier directement
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 
 from Common.ui.common import (Button, FormLabel,
                               FWidget, LineEdit)
@@ -469,6 +476,7 @@ class ProviderOrClientTableWidget(QListWidget):
 class ProviderOrClientQListWidgetItem(QListWidgetItem):
     def __init__(self, provid_clt):
         super(ProviderOrClientQListWidgetItem, self).__init__()
+        from PyQt6.QtCore import QSize
 
         self.provid_clt = provid_clt
         self.setSizeHint(QSize(0, 30))
@@ -553,6 +561,9 @@ class RapportTableWidget(FTableWidget):
         
         self.label_mov_tt = "-"
         self.provider_clt = None
+        self.totals_debit = 0.0
+        self.totals_credit = 0.0
+        self.balance_tt = 0.0
 
     def refresh_(self, provid_clt_id=None, search=None):
         """Rafraîchissement avec calculs améliorés"""
@@ -562,6 +573,7 @@ class RapportTableWidget(FTableWidget):
         self.totals_debit = 0.0
         self.totals_credit = 0.0
         self.balance_tt = 0.0
+        self._totals_row_added = False
         
         self._reset()
         self.set_data_for(provid_clt_id=provid_clt_id, search=search)
@@ -643,9 +655,13 @@ class RapportTableWidget(FTableWidget):
         
         self.parent.btt_pdf_export.setEnabled(True)
         self.parent.btt_xlsx_export.setEnabled(True)
+        # Éviter les appels multiples (Qt peut rappeler extend_rows plusieurs fois)
+        if getattr(self, "_totals_row_added", False):
+            return
+        self._totals_row_added = True
+
         nb_rows = self.rowCount()
         self.setRowCount(nb_rows + 1)
-        self.setSpan(nb_rows + 2, 2, 2, 4)
         
         # Initialisation des totaux
         self.totals_debit = 0.0
@@ -688,39 +704,115 @@ class RapportTableWidget(FTableWidget):
             TotalsWidget(device_amount(self.totals_credit, self.provid_clt_id)),
         )
 
+    def _format_date_for_export(self, date_val):
+        """Formate une date pour l'export PDF (lisible)."""
+        if date_val is None:
+            return ""
+        if hasattr(date_val, "strftime"):
+            return date_val.strftime("%d/%m/%Y")
+        return str(date_val)[:10] if len(str(date_val)) >= 10 else str(date_val)
+
     def dict_data(self):
-        """Données d'export avec calculs corrects"""
-        title = "Movements"
-        
-        # Déterminer le nom du client pour l'export
-        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
-        client_id = getattr(self.provider_clt, 'id', None) if hasattr(self.provider_clt, 'id') else None
-        
+        """Données d'export PDF/XLSX : titre, en-têtes, lignes formatées + totaux, période, infos compte."""
+        client_name = self.provider_clt.name if hasattr(self.provider_clt, "name") else str(self.provider_clt)
+        client_id = getattr(self.provider_clt, "id", None) if hasattr(self.provider_clt, "id") else None
+        is_single = isinstance(self.provider_clt, ProviderOrClient)
+
+        # Totaux (initialisés dans __init__, recalculés dans extend_rows())
+        totals_debit = getattr(self, "totals_debit", 0.0)
+        totals_credit = getattr(self, "totals_credit", 0.0)
+        balance_tt = getattr(self, "balance_tt", 0.0)
+
+        title = "Relevé des mouvements"
+        if is_single:
+            title = f"{title} — {client_name}"
+        else:
+            title = f"{title} — Tous les comptes"
+
+        # Lignes formatées pour le PDF (5 colonnes, sans id) : Date, Libellé, Débit, Crédit, Solde
+        export_rows = []
+        for row in self.data:
+            date_val, libelle, debit, credit, balance, _ = row
+            export_rows.append([
+                self._format_date_for_export(date_val),
+                str(libelle or ""),
+                device_amount(debit, client_id),
+                device_amount(credit, client_id),
+                device_amount(balance, client_id),
+            ])
+        # Ligne de séparation visuelle avant totaux (vide)
+        export_rows.append(["", "", "", "", ""])
+        # Ligne des totaux
+        export_rows.append([
+            "",
+            "Totaux",
+            device_amount(totals_debit, client_id),
+            device_amount(totals_credit, client_id),
+            device_amount(balance_tt, client_id),
+        ])
+
+        date_str = self.parent.now
+        if is_single:
+            date_str = f"Au {date_str} — Solde : {device_amount(balance_tt, client_id)}"
+
+        # Période couverte par les mouvements
+        period_str = ""
+        nb_movements = len(self.data)
+        if self.data:
+            first_date = self._format_date_for_export(self.data[0][0])
+            last_date = self._format_date_for_export(self.data[-1][0])
+            period_str = f"Période : du {first_date} au {last_date} — {nb_movements} mouvement(s)"
+
+        # Nom de fichier sécurisé (caractères interdits Windows/Unix)
+        safe_name = client_name if is_single else "tous_comptes"
+        for c in r'\/:*?"<>|':
+            safe_name = safe_name.replace(c, "_")
+        safe_name = safe_name.replace(" ", "_")[:40].strip("_") or "compte"
+        file_name = f"Releve_mouvements_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+
+        # Excel: le nom d'onglet doit être <= 31 caractères
+        sheet_name = "Mouvements"
+        if is_single:
+            sheet_name = f"Mouv. {safe_name}"
+        else:
+            sheet_name = "Mouv. Tous"
+        sheet_name = sheet_name[:31]
+
+        # Bloc d'en-tête pour le PDF (compte, type, tél., solde, période)
+        others = [
+            ("A7", "C7", "Compte : {}".format(client_name)),
+        ]
+        if is_single:
+            type_label = getattr(self.provider_clt, "type_", None) or "Compte"
+            others.append(("A8", "C8", "Type : {}".format(type_label)))
+            tel = getattr(self.provider_clt, "phone", None)
+            others.append(("A9", "C9", "Tél. : {}".format(tel if tel is not None else "—")))
+            others.append(("A10", "C10", "Solde au {} : {}".format(self.parent.now, device_amount(balance_tt, client_id))))
+            if period_str:
+                others.append(("A11", "E11", period_str))
+        else:
+            others.append(("A8", "C8", "Solde au {} : {}".format(self.parent.now, device_amount(balance_tt, client_id))))
+            if period_str:
+                others.append(("A9", "E9", period_str))
+
         return {
-            "file_name": title,
-            "headers": self.hheaders[:-1],
-            "data": self.data,
+            "file_name": file_name,
+            "title": title,
+            "date": date_str,
+            "headers": ["Date", "Libellé", "Débit", "Crédit", "Solde"],
+            "data": export_rows,
             "extend_rows": [
                 (1, self.label_mov_tt),
-                (2, self.totals_debit),
-                (3, self.totals_credit),
+                (2, totals_debit),
+                (3, totals_credit),
             ],
-            "sheet": title,
+            "sheet": sheet_name,
             "widths": self.stretch_columns,
             "format_money": ["C:C", "D:D", "E:E"],
             "exclude_row": len(self.data) - 1,
-            "date": self.parent.now,
-            "others": [
-                ("A7", "C7", "Compte : {}".format(client_name)),
-                (
-                    "A8",
-                    "B8",
-                    "Solde au {}: {}".format(
-                        self.parent.now,
-                        device_amount(self.balance_tt, client_id),
-                    ),
-                ),
-            ],
+            "others": others,
+            "period": period_str,
+            "nb_movements": nb_movements,
         }
 
 
@@ -774,6 +866,7 @@ class RapportCISSTableWidget(FTableWidget):
         self.totals_credit = 0.0
         self.totals_weight = 0.0
         self.balance_tt = 0.0
+        self._totals_row_added = False
         
         self._reset()
         self.set_data_for(provid_clt_id=provid_clt_id, search=search)
@@ -868,9 +961,12 @@ class RapportCISSTableWidget(FTableWidget):
         
         self.parent.btt_pdf_export.setEnabled(True)
         self.parent.btt_xlsx_export.setEnabled(True)
+        if getattr(self, "_totals_row_added", False):
+            return
+        self._totals_row_added = True
+
         nb_rows = self.rowCount()
         self.setRowCount(nb_rows + 1)
-        self.setSpan(nb_rows + 2, 2, 2, 4)
         
         # Initialisation des totaux
         self.totals_weight = 0.0
