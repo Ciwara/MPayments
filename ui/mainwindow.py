@@ -7,6 +7,7 @@ from Common.ui.common import FMainWindow
 from configuration import Config
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QApplication
 from ui.dashboard import DashboardWidget
 from ui.menubar import MenuBar
 from ui.menutoolbar import MenuToolBar
@@ -30,8 +31,38 @@ class MainWindow(FMainWindow):
         # Configuration de la barre d'outils selon les paramètres
         self._setup_toolbar()
 
+        # Appliquer le thème sauvegardé (persistant)
+        self.apply_saved_theme()
+
         # Changement vers le contexte initial
         self.change_context(DashboardWidget)
+
+    def apply_saved_theme(self):
+        """Applique le thème (Settings.theme) au démarrage."""
+        try:
+            from Common.ui.theme import apply_theme, THEME_NAMES
+
+            sttg = Settings.get_by_id(1)
+            theme_name = getattr(sttg, "theme", "system") or "system"
+            if theme_name not in THEME_NAMES:
+                # Compatibilité avec d'anciens thèmes ("default", etc.)
+                theme_name = "system" if theme_name in ("default", "") else "light"
+
+            app = QApplication.instance()
+            apply_theme(app, theme_name, save_to_settings=False)
+        except Exception:
+            # Ne pas bloquer le démarrage si la DB n'est pas prête
+            return
+
+    def set_theme(self, theme_name):
+        """Appelé par le menu Common pour changer le thème + sauvegarder."""
+        try:
+            from Common.ui.theme import apply_theme
+
+            app = QApplication.instance()
+            apply_theme(app, theme_name, save_to_settings=True)
+        except Exception:
+            return
 
     def _setup_toolbar(self):
         """Configure la barre d'outils selon les paramètres utilisateur"""
@@ -69,3 +100,4 @@ class MainWindow(FMainWindow):
         
         # Configuration de la barre d'outils selon les paramètres
         self._setup_toolbar()
+        self.apply_saved_theme()

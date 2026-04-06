@@ -27,53 +27,50 @@ from ui.debt_manager import safe_float, precise_calculation
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
-# Palette de couleurs moderne
-COLORS = {
-    'primary': '#1976D2',
-    'primary_light': '#42A5F5',
-    'primary_dark': '#0D47A1',
-    'secondary': '#FF5722',
-    'secondary_light': '#FF8A65',
-    'success': '#4CAF50',
-    'success_light': '#81C784',
-    'warning': '#FF9800',
-    'warning_light': '#FFB74D',
-    'error': '#F44336',
-    'error_light': '#E57373',
-    'info': '#2196F3',
-    'info_light': '#64B5F6',
-    'background': '#F0F2F5',
-    'surface': '#FFFFFF',
-    'surface_variant': '#F5F5F5',
-    'text_primary': '#1a1a2e',
-    'text_secondary': '#6c757d',
-    'border': '#E0E0E0',
-    'shadow': 'rgba(0, 0, 0, 0.08)',
+# Couleurs d'accent (fixes) + le reste via la palette Qt (dark/light/system)
+ACCENT = {
+    "primary": "#1976D2",
+    "primary_light": "#42A5F5",
+    "primary_dark": "#0D47A1",
+    "secondary": "#FF5722",
+    "secondary_light": "#FF8A65",
+    "success": "#4CAF50",
+    "success_light": "#81C784",
+    "warning": "#FF9800",
+    "warning_light": "#FFB74D",
+    "error": "#F44336",
+    "error_light": "#E57373",
+    "info": "#2196F3",
+    "info_light": "#64B5F6",
 }
 
 # Feuille de style globale du dashboard
 DASHBOARD_STYLE = f"""
     QWidget#dashboard_root {{
-        background-color: {COLORS['background']};
+        background-color: palette(window);
+        color: palette(window-text);
+    }}
+    QWidget#dashboard_root QLabel {{
+        color: palette(window-text);
     }}
     QScrollArea {{
         border: none;
         background: transparent;
     }}
     QFrame#metrics_card {{
-        background-color: {COLORS['surface']};
+        background-color: palette(base);
         border-radius: 12px;
-        border: 1px solid {COLORS['border']};
+        border: 1px solid palette(mid);
         padding: 4px;
     }}
     QFrame#metrics_card:hover {{
-        border-color: {COLORS['primary_light']};
-        background-color: {COLORS['surface']};
+        border-color: {ACCENT['primary_light']};
+        background-color: palette(base);
     }}
     QFrame#chart_widget {{
-        background-color: {COLORS['surface']};
+        background-color: palette(base);
         border-radius: 12px;
-        border: 1px solid {COLORS['border']};
+        border: 1px solid palette(mid);
         padding: 12px;
     }}
     QFrame#section_title {{
@@ -81,7 +78,7 @@ DASHBOARD_STYLE = f"""
         border: none;
     }}
     QPushButton {{
-        background-color: {COLORS['primary']};
+        background-color: {ACCENT['primary']};
         color: white;
         border: none;
         border-radius: 8px;
@@ -89,54 +86,54 @@ DASHBOARD_STYLE = f"""
         font-weight: bold;
     }}
     QPushButton:hover {{
-        background-color: {COLORS['primary_dark']};
+        background-color: {ACCENT['primary_dark']};
     }}
     QPushButton:pressed {{
-        background-color: {COLORS['primary_dark']};
+        background-color: {ACCENT['primary_dark']};
     }}
     QComboBox {{
-        background-color: {COLORS['surface']};
-        border: 1px solid {COLORS['border']};
+        background-color: palette(base);
+        border: 1px solid palette(mid);
         border-radius: 8px;
         padding: 6px 12px;
         min-width: 140px;
     }}
     QComboBox:hover {{
-        border-color: {COLORS['primary_light']};
+        border-color: {ACCENT['primary_light']};
     }}
     QTableWidget {{
-        background-color: {COLORS['surface']};
+        background-color: palette(base);
         border-radius: 8px;
-        border: 1px solid {COLORS['border']};
-        gridline-color: {COLORS['border']};
+        border: 1px solid palette(mid);
+        gridline-color: palette(mid);
     }}
     QTableWidget::item {{
         padding: 8px;
     }}
     QHeaderView::section {{
-        background-color: {COLORS['surface_variant']};
+        background-color: palette(alternate-base);
         padding: 10px;
         border: none;
-        border-bottom: 2px solid {COLORS['primary']};
+        border-bottom: 2px solid {ACCENT['primary']};
         font-weight: bold;
     }}
     QProgressBar {{
         border: none;
         border-radius: 4px;
-        background-color: {COLORS['surface_variant']};
+        background-color: palette(alternate-base);
         text-align: center;
     }}
     QProgressBar::chunk {{
         border-radius: 4px;
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-            stop:0 {COLORS['primary_light']}, stop:1 {COLORS['primary']});
+            stop:0 {ACCENT['primary_light']}, stop:1 {ACCENT['primary']});
     }}
 """
 
 class MetricsCard(QFrame):
     """Widget carte pour afficher une métrique avec design moderne"""
     
-    def __init__(self, title, value, trend=None, color=COLORS['primary'], icon=None):
+    def __init__(self, title, value, trend=None, color=ACCENT["primary"], icon=None):
         super().__init__()
         self.setFrameStyle(QFrame.Shape.NoFrame)
         self.setObjectName("metrics_card")
@@ -162,7 +159,7 @@ class MetricsCard(QFrame):
         
         title_label = QLabel(title)
         title_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
-        title_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        title_label.setStyleSheet("color: palette(window-text);")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         
@@ -171,7 +168,7 @@ class MetricsCard(QFrame):
         # Valeur principale — référence conservée pour mise à jour
         self.value_label = QLabel(str(value))
         self.value_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
-        self.value_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        self.value_label.setStyleSheet("color: palette(window-text);")
         layout.addWidget(self.value_label)
         
         if trend:
@@ -179,7 +176,7 @@ class MetricsCard(QFrame):
             trend_indicator = QLabel("↗" if trend.startswith("+") else "↘" if trend.startswith("-") else "→")
             trend_label = QLabel(trend)
             trend_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
-            trend_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+            trend_label.setStyleSheet("color: palette(window-text);")
             trend_layout.addWidget(trend_indicator)
             trend_layout.addWidget(trend_label)
             trend_layout.addStretch()
@@ -212,12 +209,12 @@ class ChartWidget(QFrame):
         header_layout = QHBoxLayout()
         self.title_label = QLabel(title)
         self.title_label.setFont(QFont("Segoe UI", 14, QFont.Weight.DemiBold))
-        self.title_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        self.title_label.setStyleSheet("color: palette(window-text);")
         header_layout.addWidget(self.title_label)
         header_layout.addStretch()
         self.count_badge = QLabel("0 éléments")
         self.count_badge.setFont(QFont("Segoe UI", 9))
-        self.count_badge.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.count_badge.setStyleSheet("color: palette(window-text);")
         header_layout.addWidget(self.count_badge)
         self.main_layout.addLayout(header_layout)
         
@@ -259,7 +256,7 @@ class ChartWidget(QFrame):
                 rank_label.setFixedSize(24, 24)
                 rank_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 rank_label.setStyleSheet(
-                    f"background-color: {COLORS['primary_light']}; color: white; "
+                    f"background-color: {ACCENT['primary_light']}; color: white; "
                     "border-radius: 12px; font-weight: bold;"
                 )
                 rank_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
@@ -281,7 +278,7 @@ class ChartWidget(QFrame):
                 value_label.setMinimumWidth(56)
                 value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
                 value_label.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-                value_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+                value_label.setStyleSheet("color: palette(window-text);")
                 item_layout.addWidget(value_label)
                 
                 self.chart_layout.addLayout(item_layout)
@@ -289,7 +286,7 @@ class ChartWidget(QFrame):
             no_data_label = QLabel("📊 Aucune donnée disponible")
             no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             no_data_label.setFont(QFont("Segoe UI", 12))
-            no_data_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+            no_data_label.setStyleSheet("color: palette(window-text);")
             self.chart_layout.addWidget(no_data_label)
     
     def _clear_layout(self, layout):
@@ -587,7 +584,7 @@ class DashboardWidget(FWidget):
         metrics_title = QLabel("📈 Métriques principales")
         metrics_title.setObjectName("section_title")
         metrics_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
-        metrics_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
+        metrics_title.setStyleSheet("color: palette(window-text); margin-bottom: 4px;")
         content_layout.addWidget(metrics_title)
         
         metrics_group = QFrame()
@@ -596,10 +593,10 @@ class DashboardWidget(FWidget):
         metrics_layout.setSpacing(16)
         
         # Cartes de métriques avec nouvelles couleurs
-        self.clients_card = MetricsCard("👥 Clients Actifs", "0", color=COLORS['success'])
-        self.payments_card = MetricsCard("💳 Total Paiements", "0", color=COLORS['info'])
-        self.credit_card = MetricsCard("💰 Crédits Totaux", "0 F", color=COLORS['warning'])
-        self.balance_card = MetricsCard("⚖️ Balance Générale", "0 F", color=COLORS['primary'])
+        self.clients_card = MetricsCard("👥 Clients Actifs", "0", color=ACCENT["success"])
+        self.payments_card = MetricsCard("💳 Total Paiements", "0", color=ACCENT["info"])
+        self.credit_card = MetricsCard("💰 Crédits Totaux", "0 F", color=ACCENT["warning"])
+        self.balance_card = MetricsCard("⚖️ Balance Générale", "0 F", color=ACCENT["primary"])
         
         metrics_layout.addWidget(self.clients_card, 0, 0)
         metrics_layout.addWidget(self.payments_card, 0, 1)
@@ -612,7 +609,7 @@ class DashboardWidget(FWidget):
         # Section des graphiques avec titre moderne
         charts_title = QLabel("📊 Analyse des tendances")
         charts_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
-        charts_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
+        charts_title.setStyleSheet("color: palette(window-text); margin-bottom: 4px;")
         content_layout.addWidget(charts_title)
         
         charts_container = QFrame()
@@ -633,7 +630,7 @@ class DashboardWidget(FWidget):
         # Section du top clients avec titre moderne
         clients_title = QLabel("🏆 Top 10 clients")
         clients_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
-        clients_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
+        clients_title.setStyleSheet("color: palette(window-text); margin-bottom: 4px;")
         content_layout.addWidget(clients_title)
         
         clients_container = QFrame()
@@ -649,7 +646,7 @@ class DashboardWidget(FWidget):
         # Informations système avec design moderne
         system_title = QLabel("ℹ️ Informations système")
         system_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
-        system_title.setStyleSheet(f"color: {COLORS['text_primary']}; margin-bottom: 4px;")
+        system_title.setStyleSheet("color: palette(window-text); margin-bottom: 4px;")
         content_layout.addWidget(system_title)
         
         system_container = QFrame()
@@ -659,7 +656,7 @@ class DashboardWidget(FWidget):
         
         self.system_info = QLabel("🔄 Chargement des informations...")
         self.system_info.setFont(QFont("Segoe UI", 11))
-        self.system_info.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.system_info.setStyleSheet("color: palette(window-text);")
         self.system_info.setWordWrap(True)
         system_layout.addWidget(self.system_info)
         

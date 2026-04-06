@@ -113,7 +113,7 @@ class DebtsTrashViewWidget(FWidget):
         self.search_field.textChanged.connect(self.search)
 
         self.search_count_label = QLabel("0 compte(s) en corbeille")
-        self.search_count_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        self.search_count_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
 
         # Boutons d'action
         self.button = Button("🔄 Actualiser")
@@ -147,10 +147,10 @@ class DebtsTrashViewWidget(FWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         title_left = QLabel("🗑️ Comptes en corbeille")
         title_left.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        title_left.setStyleSheet(f"color: {COLORS['text_primary']};")
+        title_left.setStyleSheet("color: palette(window-text);")
         left_layout.addWidget(title_left)
         type_label = QLabel("Afficher :")
-        type_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        type_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
         left_layout.addWidget(type_label)
         left_layout.addWidget(self.type_filter_combo)
         left_layout.addWidget(self.search_field)

@@ -159,7 +159,7 @@ class DebtsViewWidget(FWidget):
 
         # Indicateur du nombre de résultats
         self.search_count_label = QLabel("0 compte(s)")
-        self.search_count_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        self.search_count_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
         logger.debug("Label nombre de résultats configuré")
 
         # Raccourci clavier Nouveau compte
@@ -196,14 +196,14 @@ class DebtsViewWidget(FWidget):
         left_container.setObjectName("accounts_panel")
         left_title = QLabel("👥 Comptes")
         left_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        left_title.setStyleSheet(f"color: {COLORS['text_primary']};")
+        left_title.setStyleSheet("color: palette(window-text);")
 
         left_layout = QVBoxLayout()
         left_layout.setSpacing(10)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(left_title)
         type_label = QLabel("Afficher :")
-        type_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        type_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
         left_layout.addWidget(type_label)
         left_layout.addWidget(self.type_filter_combo)
         left_layout.addWidget(self.search_field)
