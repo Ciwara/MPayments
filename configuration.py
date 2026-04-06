@@ -51,10 +51,13 @@ class Config(CConstants):
     APP_VERSION = 1
     APP_DATE = "11/2017"
     img_media = os.path.join(os.path.join(ROOT_DIR, "static"), "images/")
-    APP_LOGO = os.path.join(img_media, "logo.png")
-    APP_LOGO_ICO = os.path.join(img_media, "logo.ico")
+    # Logo: si vous déposez de nouveaux fichiers (logo_v2.*), ils seront utilisés automatiquement.
+    _logo_png_v2 = os.path.join(img_media, "logo_v2.png")
+    _logo_ico_v2 = os.path.join(img_media, "logo_v2.ico")
+    APP_LOGO = _logo_png_v2 if os.path.exists(_logo_png_v2) else os.path.join(img_media, "logo.png")
+    APP_LOGO_ICO = _logo_ico_v2 if os.path.exists(_logo_ico_v2) else os.path.join(img_media, "logo.ico")
     BASE_URL = "http://file-repo.ml"
-    BASE_URL = "http://192.168.6.6:8000"
+    BASE_URL = "http://192.168.6.6:8000" # local
 
     # Configuration de l'application
     BASE_DIR = Path(__file__).parent.absolute()

@@ -7,7 +7,7 @@ from Common.ui.common import FMainWindow
 from configuration import Config
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QToolBar
 from ui.dashboard import DashboardWidget
 from ui.menubar import MenuBar
 from ui.menutoolbar import MenuToolBar
@@ -36,6 +36,23 @@ class MainWindow(FMainWindow):
 
         # Changement vers le contexte initial
         self.change_context(DashboardWidget)
+
+    def refresh_menu_after_login(self):
+        """
+        Appelé par `Common.cmain` après une connexion (ou auto-connexion).
+        Reconstruit les menus/toolbar afin d'afficher l'utilisateur connecté.
+        """
+        try:
+            self.menubar = MenuBar(self)
+            self.setMenuBar(self.menubar)
+        except Exception:
+            pass
+
+        # La toolbar dépend aussi parfois du contexte utilisateur
+        try:
+            self._setup_toolbar()
+        except Exception:
+            pass
 
     def apply_saved_theme(self):
         """Applique le thème (Settings.theme) au démarrage."""
@@ -67,6 +84,30 @@ class MainWindow(FMainWindow):
     def _setup_toolbar(self):
         """Configure la barre d'outils selon les paramètres utilisateur"""
         try:
+            # Éviter les doublons: supprimer toute toolbar existante
+            existing_tb = getattr(self, "toolbar", None)
+            if existing_tb is not None:
+                try:
+                    self.removeToolBar(existing_tb)
+                except Exception:
+                    pass
+                try:
+                    existing_tb.deleteLater()
+                except Exception:
+                    pass
+                self.toolbar = None
+
+            # Certaines versions peuvent avoir des toolbars ajoutées sans référence
+            for tb in self.findChildren(QToolBar):
+                try:
+                    self.removeToolBar(tb)
+                except Exception:
+                    pass
+                try:
+                    tb.deleteLater()
+                except Exception:
+                    pass
+
             sttg = Settings().get(id=1)
             if sttg.toolbar:
                 self.toolbar = MenuToolBar(self)
@@ -88,16 +129,24 @@ class MainWindow(FMainWindow):
 
     def exit(self):
         """Méthode de sortie propre de l'application"""
-        self.logout()
-        self.close()
+        try:
+            self.logout()
+        except Exception:
+            pass
+        try:
+            self.close()
+        finally:
+            # Quitter proprement la boucle Qt (évite les segfaults à la destruction)
+            try:
+                app = QApplication.instance()
+                if app is not None:
+                    app.quit()
+            except Exception:
+                pass
 
     def on_login_success(self):
         """Appelé après une connexion réussie"""
         print('Login successful')
         # Initialisation de la barre de menu
-        self.menubar = MenuBar(self)
-        self.setMenuBar(self.menubar)
-        
-        # Configuration de la barre d'outils selon les paramètres
-        self._setup_toolbar()
+        self.refresh_menu_after_login()
         self.apply_saved_theme()

@@ -15,7 +15,7 @@ def test_dashboard():
     
     try:
         # Initialisation de l'application Qt
-        from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
+        from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
         
         app = QApplication(sys.argv)
         app.setApplicationName("Test Dashboard MPayments")
@@ -69,7 +69,7 @@ def test_dashboard():
         print("💡 Utilisez Ctrl+C ou fermez la fenêtre pour quitter")
         
         # Démarrage de l'application
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
         
     except ImportError as e:
         print(f"❌ Erreur d'import: {e}")
@@ -85,9 +85,9 @@ def test_imports():
     print("🔍 Test des imports...")
     
     modules_to_test = [
-        "PyQt5.QtWidgets",
-        "PyQt5.QtCore", 
-        "PyQt5.QtGui",
+        "PyQt6.QtWidgets",
+        "PyQt6.QtCore", 
+        "PyQt6.QtGui",
         "models",
         "configuration",
         "data_helper"
