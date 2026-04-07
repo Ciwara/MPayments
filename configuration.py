@@ -25,11 +25,13 @@ class Config(CConstants):
     # ------------------------- Organisation --------------------------#
 
     DEBUG = False
+    # False = démarrage sans contrôle de licence (install / démo). Sinon : COMMON_SKIP_LICENSE=1.
+    LICENSE_REQUIRED = False
     # Cise app
     # CISS = True
     CISS = False
     SERV = True
-    LSE = True
+    # LSE = True
     # DEVISE_PEP_PROV = True
     DEVISE_PEP_PROV = False
 
