@@ -17,7 +17,7 @@ class Setup(AdminDatabase):
     """docstring for FixtInit"""
 
     def __init__(self):
-        super(AdminDatabase, self).__init__()
+        super().__init__()
 
         # Ajouter Owner en premier pour s'assurer qu'il est créé avant Payment
         self.LIST_CREAT.append(Owner)

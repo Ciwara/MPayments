@@ -27,6 +27,8 @@ class Config(CConstants):
     DEBUG = False
     # False = démarrage sans contrôle de licence (install / démo). Sinon : COMMON_SKIP_LICENSE=1.
     LICENSE_REQUIRED = False
+    # True = sauvegarde auto uniquement sur clé USB (dialogues). False = dossier backups/ local.
+    BACKUP_TO_USB = False
     # Cise app
     # CISS = True
     CISS = False
