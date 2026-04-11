@@ -24,6 +24,35 @@ import Common.cstatic as _cstatic  # noqa: E402
 _cstatic.LICENSE_REQUIRED = Config.LICENSE_REQUIRED
 _cstatic.BACKUP_TO_USB = Config.BACKUP_TO_USB
 
+
+def _register_cleanable_models():
+    """Tables proposées dans Common.ui.clean_db (cases à cocher + ordre / prérequis FK)."""
+    from Common.models import Organization, Owner, Settings
+    from models import Payment, ProviderOrClient
+
+    cm = _cstatic.CLEANABLE_MODELS
+    cm.clear()
+    cm.extend(
+        [
+            ("Paiements", Payment),
+            ("Comptes clients / fournisseurs", ProviderOrClient),
+            ("Paramètres", Settings),
+            ("Organisation", Organization),
+            ("Utilisateurs", Owner),
+        ]
+    )
+    prereq = _cstatic.CLEAN_MODEL_PREREQUISITES
+    prereq.clear()
+    prereq.update(
+        {
+            ProviderOrClient: [Payment],
+            Owner: [Payment],
+        }
+    )
+
+
+_register_cleanable_models()
+
 from Common.cmain import cmain  # noqa: E402
 
 if __name__ == "__main__":
