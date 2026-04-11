@@ -611,7 +611,7 @@ class RapportTableWidget(FTableWidget):
             qs = qs.select().where(Payment.provider_clt == self.provider_clt)
             solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
             tel = self.provider_clt.phone or "—"
-            msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
+            msg = f"<h3>Compte : {self.provider_clt.name} — |Solde : {solde}</h3><h4>Tel : {tel}</h4>"
             logger.debug(f"Filtre sur le compte: {self.provider_clt.name}")
         else:
             self.provider_clt = "Tous"

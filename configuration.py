@@ -10,7 +10,9 @@ from pathlib import Path
 # from static import Constants
 from Common.cstatic import CConstants
 
-ROOT_DIR = os.path.dirname(os.path.abspath("__file__"))
+# Répertoire de ce module (ne pas utiliser abspath("__file__") : c’est une chaîne littérale, pas le module).
+_BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = str(_BASE_DIR)
 
 
 class Config(CConstants):
@@ -54,7 +56,7 @@ class Config(CConstants):
     APP_NAME = "MPayments"
     APP_VERSION = 1
     APP_DATE = "11/2017"
-    img_media = os.path.join(os.path.join(ROOT_DIR, "static"), "images/")
+    img_media = os.path.join(ROOT_DIR, "static", "images") + os.sep
     # Logo: si vous déposez de nouveaux fichiers (logo_v2.*), ils seront utilisés automatiquement.
     _logo_png_v2 = os.path.join(img_media, "logo_v2.png")
     _logo_ico_v2 = os.path.join(img_media, "logo_v2.ico")
@@ -63,8 +65,8 @@ class Config(CConstants):
     BASE_URL = "http://file-repo.ml"
     BASE_URL = "http://192.168.6.6:8000" # local
 
-    # Configuration de l'application
-    BASE_DIR = Path(__file__).parent.absolute()
+    # Configuration de l'application (identique à _BASE_DIR)
+    BASE_DIR = _BASE_DIR
     MEDIA_DIR = os.path.join(BASE_DIR, "media")
     IMG_MEDIA = os.path.join(MEDIA_DIR, "img")
     ICON_MEDIA = os.path.join(MEDIA_DIR, "icons")

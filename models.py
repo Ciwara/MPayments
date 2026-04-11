@@ -108,19 +108,25 @@ class ProviderOrClient(BaseModel):
         return self.__str__()
 
     def last_payment(self):
+        """Dernier mouvement du compte (non supprimé), le plus récent en date."""
         try:
             return (
                 Payment.select()
-                .where(Payment.provider_client == self)
-                .order_by(Payment.date.desc())
+                .where(
+                    Payment.provider_clt == self,
+                    Payment.deleted == False,
+                )
+                .order_by(Payment.date.desc(), Payment.id.desc())
                 .get()
             )
-        except Exception as e:
+        except Payment.DoesNotExist:
             return None
 
     def last_remaining(self):
         last_r = self.last_payment()
-        return last_r.remaining if last_r else 0
+        if last_r is None:
+            return 0
+        return float(last_r.balance)
 
     def __str__(self):
         return u"{}, {}".format(self.name, self.phone)
