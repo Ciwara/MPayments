@@ -10,6 +10,7 @@ from PyQt6.QtGui import QFont, QPixmap, QIcon
 from PyQt6.QtCore import Qt
 
 from Common.ui.common import Button, FLabel, FPageTitle, FWidget
+from models import Payment
 
 # Configuration du logger
 logging.basicConfig(
@@ -81,7 +82,7 @@ class DeleteViewWidget(QDialog, FWidget):
         # Titre principal avec icône d'avertissement
         title_container = QLabel()
         title_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_container.setText("⚠️ ATTENTION - Suppression définitive")
+        title_container.setText("⚠️ Mettre le mouvement en corbeille ?")
         vbox.addWidget(title_container)
         
         # Zone d'information avec le compte
@@ -95,8 +96,8 @@ class DeleteViewWidget(QDialog, FWidget):
         warning_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         warning_text.setWordWrap(True)
         warning_text.setText(
-            "⚠️ Cette action est irréversible.\n"
-            "Êtes-vous sûr de vouloir supprimer cet élément ?"
+            "Le mouvement sera placé en corbeille (récupérable depuis le menu Poubelle).\n"
+            "Pour une suppression définitive, utilisez la Poubelle après vidage."
         )
         vbox.addWidget(warning_text)
         
@@ -111,7 +112,7 @@ class DeleteViewWidget(QDialog, FWidget):
         button_container.addWidget(cancel_button)
         
         # Bouton supprimer (style d'avertissement)
-        delete_button = Button("🗑️ Supprimer")
+        delete_button = Button("🗑️ Corbeille")
         delete_button.clicked.connect(self.delete)
         button_container.addWidget(delete_button)
         
@@ -145,8 +146,11 @@ class DeleteViewWidget(QDialog, FWidget):
             except AttributeError:
                 item_name = getattr(self.obj, 'name', 'l\'élément')
             
-            self.obj.deletes_data()
-            logger.debug("Objet supprimé avec succès")
+            if isinstance(self.obj, Payment):
+                self.obj.move_to_trash()
+            else:
+                self.obj.deletes_data()
+            logger.debug("Objet supprimé / mis en corbeille avec succès")
             
             self.cancel()
             
@@ -156,7 +160,7 @@ class DeleteViewWidget(QDialog, FWidget):
                 self.table_p.refresh_()
                 
             self.parent.Notify(
-                "✅ {} a été supprimé avec succès".format(item_name), "success"
+                "✅ Mouvement de « {} » mis en corbeille".format(item_name), "success"
             )
             
         except Exception as e:

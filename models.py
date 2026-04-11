@@ -87,11 +87,15 @@ class ProviderOrClient(BaseModel):
             p.save()
 
     def restore_data(self):
+        """Réactive le compte puis restaure chaque mouvement en ordre (date, id)."""
         self.deleted = False
         self.save()
-        for p in self.payments():
-            p.deleted = False
-            p.save()
+        for p in (
+            Payment.select()
+            .where(Payment.provider_clt == self, Payment.deleted == True)
+            .order_by(Payment.date.asc(), Payment.id.asc())
+        ):
+            p.restore_from_trash()
 
     def delete_permanate(self):
         for p in self.payments():
@@ -243,26 +247,30 @@ class Payment(BaseModel):
     def next_rpt(self):
         try:
             return self.next_rpts().get()
-        except Exception as e:
-            print("next_rpt ", e)
+        except Payment.DoesNotExist:
             return None
 
     def next_rpts(self):
-        try:
-            return (
-                Payment.select()
-                .where(
-                    Payment.provider_clt == self.provider_clt,
-                    Payment.date > self.date,
-                    Payment.deleted == False,
-                )
-                .order_by(Payment.date.asc())
+        """Mouvements actifs strictement après celui-ci (même jour : id plus grand)."""
+        pred = [
+            Payment.provider_clt == self.provider_clt,
+            Payment.deleted == False,
+        ]
+        if self.id is not None:
+            pred.append(
+                (Payment.date > self.date)
+                | ((Payment.date == self.date) & (Payment.id > self.id))
             )
-        except Exception as e:
-            return None
-            print("next_rpts ", e)
+        else:
+            pred.append(Payment.date > self.date)
+        return (
+            Payment.select()
+            .where(*pred)
+            .order_by(Payment.date.asc(), Payment.id.asc())
+        )
 
     def deletes_data(self):
+        """Suppression définitive en base (recalcul des soldes des voisins)."""
         last = self.last_balance_payment()
         next_ = self.next_rpt()
         self.delete_instance()
@@ -273,18 +281,40 @@ class Payment(BaseModel):
                 next_.save()
         return
 
+    def move_to_trash(self):
+        """Met le paiement en corbeille (soft delete) et recalcule les mouvements suivants."""
+        nxt = self.next_rpt()
+        self.deleted = True
+        super(Payment, self).save()
+        if nxt:
+            nxt.save()
+
+    def restore_from_trash(self):
+        """Retire le paiement de la corbeille et recalcule la chaîne des soldes."""
+        if not self.deleted:
+            return
+        self.deleted = False
+        self.save()
+
     def last_balance_payment(self):
+        """Dernier mouvement actif avant celui-ci (même jour : id plus petit)."""
         try:
+            pred = [
+                Payment.provider_clt == self.provider_clt,
+                Payment.deleted == False,
+            ]
+            if self.id is not None:
+                pred.append(
+                    (Payment.date < self.date)
+                    | ((Payment.date == self.date) & (Payment.id < self.id))
+                )
+            else:
+                pred.append(Payment.date < self.date)
             return (
                 Payment.select()
-                .where(
-                    Payment.provider_clt == self.provider_clt,
-                    Payment.deleted == False,
-                    Payment.date < self.date,
-                )
-                .order_by(Payment.date.desc())
+                .where(*pred)
+                .order_by(Payment.date.desc(), Payment.id.desc())
                 .get()
             )
-        except Exception as e:
-            # print("last_balance_payment", e)
+        except Payment.DoesNotExist:
             return None

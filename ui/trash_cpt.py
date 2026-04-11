@@ -183,6 +183,8 @@ class DebtsTrashViewWidget(FWidget):
         self.setLayout(hbox)
 
         self.update_accounts_count()
+        # Afficher d’emblée toutes les opérations en corbeille (sans sélection de compte).
+        self.table.refresh_(provid_clt_id=None)
         logger.debug("Mise en page Poubelle configurée")
 
     def refresh_period(self):
@@ -209,16 +211,40 @@ class DebtsTrashViewWidget(FWidget):
 
     def _confirm_suppression(self):
         """Demande confirmation avant suppression définitive."""
+        item = self.table_provid_clt.currentItem()
+        if not isinstance(item, ProviderOrClientQListWidgetItem):
+            return
+        if isinstance(item.provid_clt, str):
+            return
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         if not isinstance(provid_clt_id, int):
             return
         try:
             account = ProviderOrClient.get(id=provid_clt_id)
+            mode = getattr(item, "list_entry_mode", "account_trash")
+            if mode == "ops_trash":
+                n = (
+                    Payment.select()
+                    .where(
+                        Payment.provider_clt == account,
+                        Payment.deleted == True,
+                    )
+                    .count()
+                )
+                msg = (
+                    f"Supprimer définitivement les {n} opération(s) en corbeille "
+                    f"pour le compte « {account.name} » ?\n\n"
+                    "Cette action est irréversible."
+                )
+            else:
+                msg = (
+                    f"Supprimer définitivement le compte « {account.name} » ?\n\n"
+                    "Cette action est irréversible (compte et paiements associés)."
+                )
             reply = QMessageBox.question(
                 self,
                 "⚠️ Suppression définitive",
-                f"Supprimer définitivement le compte « {account.name} » ?\n\n"
-                "Cette action est irréversible (compte et paiements associés).",
+                msg,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -229,32 +255,75 @@ class DebtsTrashViewWidget(FWidget):
             self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
 
     def suppression(self):
+        item = self.table_provid_clt.currentItem()
+        if not isinstance(item, ProviderOrClientQListWidgetItem):
+            return
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         if not isinstance(provid_clt_id, int):
             return
-        logger.debug(f"Suppression définitive du compte ID: {provid_clt_id}")
+        mode = getattr(item, "list_entry_mode", "account_trash")
+        logger.debug(
+            "Suppression définitive compte ID: %s mode=%s", provid_clt_id, mode
+        )
         try:
-            ProviderOrClient.get(id=provid_clt_id).delete_permanate()
-            self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
+            account = ProviderOrClient.get(id=provid_clt_id)
+            if mode == "ops_trash":
+                for p in (
+                    Payment.select()
+                    .where(
+                        Payment.provider_clt == account,
+                        Payment.deleted == True,
+                    )
+                    .order_by(Payment.date.asc(), Payment.id.asc())
+                ):
+                    p.deletes_data()
+                self.parent.Notify(
+                    "✅ Opérations en corbeille supprimées définitivement", "success"
+                )
+            else:
+                account.delete_permanate()
+                self.parent.Notify("✅ Compte supprimé définitivement", "success")
+            self.table_provid_clt.refresh_(
+                provid_clt=self.search_field.text().strip() or None
+            )
             self.update_accounts_count()
-            self.table.refresh_()
-            self.parent.Notify("✅ Compte supprimé définitivement", "success")
+            self.table.refresh_(provid_clt_id=provid_clt_id)
         except Exception as e:
             logger.error(f"Erreur lors de la suppression définitive: {str(e)}")
             self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
 
     def restoration(self):
+        item = self.table_provid_clt.currentItem()
+        if not isinstance(item, ProviderOrClientQListWidgetItem):
+            return
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         if not isinstance(provid_clt_id, int):
             return
-        logger.debug(f"Restauration du compte ID: {provid_clt_id}")
+        mode = getattr(item, "list_entry_mode", "account_trash")
+        logger.debug("Restauration compte ID: %s mode=%s", provid_clt_id, mode)
         try:
             account = ProviderOrClient.get(id=provid_clt_id)
-            account.restore_data()
-            self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
+            if mode == "ops_trash":
+                for p in (
+                    Payment.select()
+                    .where(
+                        Payment.provider_clt == account,
+                        Payment.deleted == True,
+                    )
+                    .order_by(Payment.date.asc(), Payment.id.asc())
+                ):
+                    p.restore_from_trash()
+                self.parent.Notify(
+                    f"♻️ Opérations restaurées pour « {account.name} »", "success"
+                )
+            else:
+                account.restore_data()
+                self.parent.Notify(f"♻️ Compte « {account.name} » restauré", "success")
+            self.table_provid_clt.refresh_(
+                provid_clt=self.search_field.text().strip() or None
+            )
             self.update_accounts_count()
-            self.table.refresh_()
-            self.parent.Notify(f"♻️ Compte « {account.name} » restauré", "success")
+            self.table.refresh_(provid_clt_id=provid_clt_id)
         except Exception as e:
             logger.error(f"Erreur lors de la restauration: {str(e)}")
             self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
@@ -300,18 +369,45 @@ class ProviderOrClientTableWidget(QListWidget):
         if hasattr(self.parent, "type_filter_combo"):
             type_filter = self.parent.type_filter_combo.currentText()
 
-        qs = ProviderOrClient.select().where(ProviderOrClient.deleted == True)
-        if type_filter == "Clients":
-            qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.CLT)
-        elif type_filter == "Fournisseurs":
-            qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR)
+        def _apply_type(q):
+            if type_filter == "Clients":
+                return q.where(ProviderOrClient.type_ == ProviderOrClient.CLT)
+            if type_filter == "Fournisseurs":
+                return q.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR)
+            return q
+
+        qs_deleted = _apply_type(
+            ProviderOrClient.select().where(ProviderOrClient.deleted == True)
+        )
+
+        pclt_ids = [
+            row.provider_clt_id
+            for row in Payment.select(Payment.provider_clt)
+            .where(Payment.deleted == True)
+            .distinct()
+        ]
+        if pclt_ids:
+            qs_ops = _apply_type(
+                ProviderOrClient.select().where(
+                    ProviderOrClient.deleted == False,
+                    ProviderOrClient.id.in_(pclt_ids),
+                )
+            )
+        else:
+            qs_ops = None
 
         if provid_clt:
             search = str(provid_clt).strip()
             if search:
-                qs = qs.where(ProviderOrClient.name.contains(search))
-        for p in qs.order_by(ProviderOrClient.name):
-            self.addItem(ProviderOrClientQListWidgetItem(p))
+                qs_deleted = qs_deleted.where(ProviderOrClient.name.contains(search))
+                if qs_ops is not None:
+                    qs_ops = qs_ops.where(ProviderOrClient.name.contains(search))
+
+        for p in qs_deleted.order_by(ProviderOrClient.name):
+            self.addItem(ProviderOrClientQListWidgetItem(p, "account_trash"))
+        if qs_ops is not None:
+            for p in qs_ops.order_by(ProviderOrClient.name):
+                self.addItem(ProviderOrClientQListWidgetItem(p, "ops_trash"))
 
         if hasattr(self.parent, "update_accounts_count"):
             self.parent.update_accounts_count()
@@ -338,11 +434,14 @@ class ProviderOrClientTableWidget(QListWidget):
 
 
 class ProviderOrClientQListWidgetItem(QListWidgetItem):
-    def __init__(self, provid_clt):
+    """list_entry_mode: account_trash = compte en corbeille, ops_trash = compte actif avec opérations supprimées."""
+
+    def __init__(self, provid_clt, list_entry_mode="account_trash"):
         logger.debug("Initialisation d'un élément de la liste avec style moderne")
         super(ProviderOrClientQListWidgetItem, self).__init__()
 
         self.provid_clt = provid_clt
+        self.list_entry_mode = list_entry_mode
         self.setSizeHint(QSize(0, 35))  # Hauteur légèrement augmentée pour le style moderne
         icon = QIcon()
 
@@ -360,6 +459,19 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
 
     def init_text(self):
         try:
+            if getattr(self, "list_entry_mode", "account_trash") == "ops_trash":
+                n = (
+                    Payment.select()
+                    .where(
+                        Payment.provider_clt == self.provid_clt,
+                        Payment.deleted == True,
+                    )
+                    .count()
+                )
+                self.setText(
+                    f"📋 {self.provid_clt.name} — {n} opération(s) en corbeille"
+                )
+                return
             solde = self.provid_clt.last_remaining()
             montant = device_amount(solde, self.provid_clt)
             prefix = "⚠️ " if self.provid_clt.is_indebted() else "👤 "
@@ -394,6 +506,8 @@ class RapportTableWidget(FTableWidget):
         self.ecart = -15
         self.display_vheaders = False
         self.provider_clt = None
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._popup_row)
 
     def refresh_(self, provid_clt_id=None, search=None):
         """ """
@@ -416,7 +530,7 @@ class RapportTableWidget(FTableWidget):
         qs = (
             Payment.select()
             .where(Payment.deleted == True)
-            .order_by(Payment.date.asc())
+            .order_by(Payment.date.asc(), Payment.id.asc())
         )
 
         self.remaining = 0
@@ -446,6 +560,54 @@ class RapportTableWidget(FTableWidget):
             (pay.date, pay.libelle, pay.debit, pay.credit, pay.balance, pay.id)
             for pay in qs.iterator()
         ]
+
+    def _main_window(self):
+        return getattr(self.parent, "parent", None)
+
+    def _popup_row(self, pos):
+        idx = self.indexAt(pos)
+        if not idx.isValid():
+            return
+        row = idx.row()
+        if row < 0 or row >= len(self.data):
+            return
+        menu = QMenu()
+        act_restore = menu.addAction("♻️ Restaurer cette opération")
+        act_erase = menu.addAction("🗑️ Supprimer définitivement…")
+        chosen = menu.exec(self.mapToGlobal(pos))
+        if chosen is None:
+            return
+        mw = self._main_window()
+        try:
+            payment = Payment.get(id=self.data[row][-1])
+            if chosen == act_restore:
+                payment.restore_from_trash()
+                if mw:
+                    mw.Notify("✅ Opération restaurée", "success")
+            elif chosen == act_erase:
+                reply = QMessageBox.question(
+                    self,
+                    "Suppression définitive",
+                    "Supprimer définitivement cette opération ? Cette action est irréversible.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    payment.deletes_data()
+                    if mw:
+                        mw.Notify("✅ Opération supprimée définitivement", "success")
+        except Exception as e:
+            logger.exception("Poubelle menu opération: %s", e)
+            if mw:
+                mw.Notify(f"❌ Erreur : {e}", "error")
+        if hasattr(self.parent, "table_provid_clt"):
+            self.parent.table_provid_clt.refresh_(
+                provid_clt=self.parent.search_field.text().strip() or None
+            )
+        if hasattr(self.parent, "update_accounts_count"):
+            self.parent.update_accounts_count()
+        pid = self.provid_clt_id if isinstance(self.provid_clt_id, int) else None
+        self.refresh_(provid_clt_id=pid)
 
     def extend_rows(self):
         nb_rows = self.rowCount()
@@ -533,6 +695,8 @@ class RapportCISSTableWidget(FTableWidget):
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r", 5: "r"}
         self.display_vheaders = False
         self.provider_clt = None
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._popup_row)
 
     def refresh_(self, provid_clt_id=None, search=None):
         """ """
@@ -554,7 +718,7 @@ class RapportCISSTableWidget(FTableWidget):
         qs = (
             Payment.select()
             .where(Payment.deleted == True)
-            .order_by(Payment.date.asc())
+            .order_by(Payment.date.asc(), Payment.id.asc())
         )
 
         self.remaining = 0
@@ -592,6 +756,54 @@ class RapportCISSTableWidget(FTableWidget):
             )
             for pay in qs.iterator()
         ]
+
+    def _main_window(self):
+        return getattr(self.parent, "parent", None)
+
+    def _popup_row(self, pos):
+        idx = self.indexAt(pos)
+        if not idx.isValid():
+            return
+        row = idx.row()
+        if row < 0 or row >= len(self.data):
+            return
+        menu = QMenu()
+        act_restore = menu.addAction("♻️ Restaurer cette opération")
+        act_erase = menu.addAction("🗑️ Supprimer définitivement…")
+        chosen = menu.exec(self.mapToGlobal(pos))
+        if chosen is None:
+            return
+        mw = self._main_window()
+        try:
+            payment = Payment.get(id=self.data[row][-1])
+            if chosen == act_restore:
+                payment.restore_from_trash()
+                if mw:
+                    mw.Notify("✅ Opération restaurée", "success")
+            elif chosen == act_erase:
+                reply = QMessageBox.question(
+                    self,
+                    "Suppression définitive",
+                    "Supprimer définitivement cette opération ? Cette action est irréversible.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    payment.deletes_data()
+                    if mw:
+                        mw.Notify("✅ Opération supprimée définitivement", "success")
+        except Exception as e:
+            logger.exception("Poubelle menu opération (CISS): %s", e)
+            if mw:
+                mw.Notify(f"❌ Erreur : {e}", "error")
+        if hasattr(self.parent, "table_provid_clt"):
+            self.parent.table_provid_clt.refresh_(
+                provid_clt=self.parent.search_field.text().strip() or None
+            )
+        if hasattr(self.parent, "update_accounts_count"):
+            self.parent.update_accounts_count()
+        pid = self.provid_clt_id if isinstance(self.provid_clt_id, int) else None
+        self.refresh_(provid_clt_id=pid)
 
     def extend_rows(self):
         nb_rows = self.rowCount()
