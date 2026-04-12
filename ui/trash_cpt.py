@@ -14,7 +14,7 @@ from Common.ui.common import (
     LineEdit,
 )
 from Common.ui.table import FTableWidget, TotalsWidget
-from Common.ui.util import is_float
+from Common.ui.util import format_number_table_no_round, is_float
 from configuration import Config
 from data_helper import device_amount
 from models import Payment, ProviderOrClient
@@ -509,6 +509,15 @@ class RapportTableWidget(FTableWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._popup_row)
 
+    def _format_for_table(self, value):
+        from decimal import Decimal
+
+        if isinstance(value, float):
+            return format_number_table_no_round(value)
+        if isinstance(value, Decimal):
+            return format_number_table_no_round(value)
+        return super()._format_for_table(value)
+
     def refresh_(self, provid_clt_id=None, search=None):
         """ """
 
@@ -631,12 +640,20 @@ class RapportTableWidget(FTableWidget):
         self.setItem(
             nb_rows,
             2,
-            TotalsWidget(device_amount(self.totals_debit, self.provid_clt_id)),
+            TotalsWidget(
+                device_amount(
+                    self.totals_debit, self.provid_clt_id, preserve_decimals=True
+                )
+            ),
         )
         self.setItem(
             nb_rows,
             3,
-            TotalsWidget(device_amount(self.totals_credit, self.provid_clt_id)),
+            TotalsWidget(
+                device_amount(
+                    self.totals_credit, self.provid_clt_id, preserve_decimals=True
+                )
+            ),
         )
 
     def dict_data(self):
@@ -697,6 +714,20 @@ class RapportCISSTableWidget(FTableWidget):
         self.provider_clt = None
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._popup_row)
+
+    def _item_for_data(self, row, column, data, context=None):
+        from decimal import Decimal
+
+        if isinstance(data, (int, float, Decimal)) and column in (2, 3, 4, 5):
+            text = format_number_table_no_round(data)
+            if column in self.align_map:
+                widget_cls = self.widget_from_align(self.align_map[column])
+            else:
+                from Common.ui.table import FlexibleReadOnlyWidget
+
+                widget_cls = FlexibleReadOnlyWidget
+            return widget_cls(text)
+        return super()._item_for_data(row, column, data, context)
 
     def refresh_(self, provid_clt_id=None, search=None):
         """ """
@@ -830,10 +861,20 @@ class RapportCISSTableWidget(FTableWidget):
         self.setItem(
             nb_rows,
             2,
-            TotalsWidget(device_amount(self.totals_weight, dvs="Kg", aftergam=3)),
+            TotalsWidget(
+                device_amount(self.totals_weight, dvs="Kg", preserve_decimals=True)
+            ),
         )
-        self.setItem(nb_rows, 3, TotalsWidget(device_amount(self.totals_debit)))
-        self.setItem(nb_rows, 4, TotalsWidget(device_amount(self.totals_credit)))
+        self.setItem(
+            nb_rows,
+            3,
+            TotalsWidget(device_amount(self.totals_debit, preserve_decimals=True)),
+        )
+        self.setItem(
+            nb_rows,
+            4,
+            TotalsWidget(device_amount(self.totals_credit, preserve_decimals=True)),
+        )
 
     def dict_data(self):
         title = "Movements"
@@ -845,7 +886,7 @@ class RapportCISSTableWidget(FTableWidget):
             "data": self.data,
             "extend_rows": [
                 (1, self.label_mov_tt),
-                (2, device_amount(self.totals_weight, dvs="F", aftergam=3)),
+                (2, device_amount(self.totals_weight, dvs="Kg", preserve_decimals=True)),
                 (3, self.totals_debit),
                 (4, self.totals_credit),
             ],

@@ -4,7 +4,7 @@
 # maintainer: Fad
 from __future__ import unicode_literals, absolute_import, division, print_function
 
-from Common.ui.util import formatted_number
+from Common.ui.util import format_number_table_no_round, formatted_number
 import sqlite3
 from datetime import datetime
 
@@ -27,14 +27,19 @@ def check_befor_update_payment(pay):
     return True
 
 
-def device_amount(value, provider=None, dvs=None, aftergam=2):
+def device_amount(value, provider=None, dvs=None, aftergam=2, preserve_decimals=False):
 
     from Common.models import Settings
     from configuration import Config
     from models import ProviderOrClient
 
+    def _fmt(v):
+        return format_number_table_no_round(v) if preserve_decimals else formatted_number(
+            v, aftergam=aftergam
+        )
+
     if dvs:
-        return "{} {}".format(formatted_number(value, aftergam=aftergam), dvs)
+        return "{} {}".format(_fmt(value), dvs)
 
     organ = Settings().get(id=1)
 
@@ -50,7 +55,7 @@ def device_amount(value, provider=None, dvs=None, aftergam=2):
             provider = provider
             dvs = provider.DEVISE.get(provider.devise)
 
-    v = formatted_number(value, aftergam=aftergam)
+    v = _fmt(value)
     if dvs == "$":
         return "{d}{v}".format(v=v, d=dvs)
     else:
