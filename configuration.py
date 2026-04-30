@@ -53,7 +53,7 @@ class Config(CConstants):
     NAME_MAIN = "main.py"
 
     pdf_source = "pdf_source.pdf"
-    APP_NAME = "MPayments"
+    APP_NAME = "Business b"
     APP_VERSION = 1
     APP_DATE = "11/2017"
     img_media = os.path.join(ROOT_DIR, "static", "images") + os.sep
