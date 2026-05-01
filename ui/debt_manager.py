@@ -119,6 +119,8 @@ class DebtsViewWidget(FWidget):
         # Optimisation de la mise en cache des données
         self._cached_data = {}
         self._last_refresh = None
+        # Affichage du solde masqué par défaut (toggle Afficher/Masquer)
+        self._show_balance_amounts = False
         
         self.title = "Gestion des dettes"
         self.now = datetime.now().strftime(Config.DATEFORMAT)
@@ -250,6 +252,9 @@ class DebtsViewWidget(FWidget):
         balance_container = QFrame()
         balance_layout = QHBoxLayout()
         balance_layout.addStretch()
+        self.toggle_balance_btt = Button("Afficher")
+        self.toggle_balance_btt.clicked.connect(self.toggle_balance_visibility)
+        balance_layout.addWidget(self.toggle_balance_btt)
         balance_layout.addWidget(self.label_balance)
         balance_layout.addStretch()
         balance_container.setLayout(balance_layout)
@@ -280,6 +285,16 @@ class DebtsViewWidget(FWidget):
 
         self.update_accounts_count()
         logger.debug("DebtsViewWidget initialisé avec succès - Design moderne appliqué")
+
+    def toggle_balance_visibility(self):
+        self._show_balance_amounts = not self._show_balance_amounts
+        self.toggle_balance_btt.setText("Masquer" if self._show_balance_amounts else "Afficher")
+        # Re-rendu des libellés qui incluent le solde (en-tête + encart solde)
+        provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
+        self.table.refresh_(provid_clt_id=provid_clt_id)
+
+    def format_balance_text(self, amount_text: str) -> str:
+        return amount_text if self._show_balance_amounts else "••••"
 
     def refresh_period(self):
         """Rafraîchit les données avec mise en cache"""
@@ -361,6 +376,7 @@ class DebtsViewWidget(FWidget):
         )
 
     def display_balance(self, amount_text):
+        amount_text = self.format_balance_text(amount_text)
         return f"""
         <div style="text-align: center;">
             <h3 style="margin: 0; color: white; font-weight: 700; font-family: 'Segoe UI';">
@@ -618,6 +634,7 @@ class RapportTableWidget(FTableWidget):
             self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
             qs = qs.select().where(Payment.provider_clt == self.provider_clt)
             solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
+            solde = self.parent.format_balance_text(solde)
             tel = self.provider_clt.phone or "—"
             msg = f"<h3>Compte : {self.provider_clt.name} — |Solde : {solde}</h3><h4>Tel : {tel}</h4>"
             logger.debug(f"Filtre sur le compte: {self.provider_clt.name}")

@@ -89,6 +89,8 @@ class DebtsTrashViewWidget(FWidget):
         self.title = "🗑️ Mouvements supprimés"
         self.now = datetime.now().strftime(Config.DATEFORMAT)
         logger.debug(f"Date actuelle: {self.now}")
+        # Affichage du solde masqué par défaut (toggle Afficher/Masquer)
+        self._show_balance_amounts = False
 
         # Labels modernes avec style amélioré
         self.label_balance = FormLabel("")
@@ -167,7 +169,16 @@ class DebtsTrashViewWidget(FWidget):
         self.splt_clt = QSplitter(Qt.Orientation.Vertical)
         self.splt_clt.addWidget(self.splt_add)
         self.splt_clt.addWidget(self.table)
-        self.splt_clt.addWidget(self.label_balance)
+        # Pied de page solde + toggle
+        self.toggle_balance_btt = Button("Afficher")
+        self.toggle_balance_btt.clicked.connect(self.toggle_balance_visibility)
+        balance_footer = QFrame()
+        balance_footer_layout = QHBoxLayout()
+        balance_footer_layout.setContentsMargins(0, 0, 0, 0)
+        balance_footer_layout.addWidget(self.toggle_balance_btt)
+        balance_footer_layout.addWidget(self.label_balance, 1)
+        balance_footer.setLayout(balance_footer_layout)
+        self.splt_clt.addWidget(balance_footer)
         logger.debug("Splitters configurés")
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -186,6 +197,15 @@ class DebtsTrashViewWidget(FWidget):
         # Afficher d’emblée toutes les opérations en corbeille (sans sélection de compte).
         self.table.refresh_(provid_clt_id=None)
         logger.debug("Mise en page Poubelle configurée")
+
+    def toggle_balance_visibility(self):
+        self._show_balance_amounts = not self._show_balance_amounts
+        self.toggle_balance_btt.setText("Masquer" if self._show_balance_amounts else "Afficher")
+        provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
+        self.table.refresh_(provid_clt_id=provid_clt_id)
+
+    def format_balance_text(self, amount_text: str) -> str:
+        return amount_text if self._show_balance_amounts else "••••"
 
     def refresh_period(self):
         logger.debug("Rafraîchissement de la période")
@@ -330,6 +350,7 @@ class DebtsTrashViewWidget(FWidget):
 
     def display_balance(self, amount_text):
         logger.debug(f"Affichage du solde avec style moderne: {amount_text}")
+        amount_text = self.format_balance_text(amount_text)
         return f"""
             <div style="text-align: center; padding: 16px;">
                 <h2 style="color: {COLORS['primary']}; margin: 0; font-weight: 700;">
@@ -472,10 +493,8 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
                     f"📋 {self.provid_clt.name} — {n} opération(s) en corbeille"
                 )
                 return
-            solde = self.provid_clt.last_remaining()
-            montant = device_amount(solde, self.provid_clt)
             prefix = "⚠️ " if self.provid_clt.is_indebted() else "👤 "
-            self.setText(f"{prefix}{self.provid_clt.name} — {montant}")
+            self.setText(f"{prefix}{self.provid_clt.name}")
         except AttributeError:
             font = QFont()
             font.setBold(True)
@@ -558,6 +577,7 @@ class RapportTableWidget(FTableWidget):
                 return
             qs = qs.where(Payment.provider_clt == self.provider_clt)
             solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
+            solde = self.parent.format_balance_text(solde)
             tel = self.provider_clt.phone or "—"
             msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
         else:
