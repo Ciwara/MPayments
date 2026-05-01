@@ -54,8 +54,8 @@ class Config(CConstants):
 
     pdf_source = "pdf_source.pdf"
     APP_NAME = "Business"
-    APP_VERSION = 1
-    APP_DATE = "11/2017"
+    APP_VERSION = "2.0.0" # Version de l'application
+    APP_DATE = "01/05/2026" # Date de la version de l'application
     img_media = os.path.join(ROOT_DIR, "static", "images") + os.sep
     # Logo: si vous déposez de nouveaux fichiers (logo_v2.*), ils seront utilisés automatiquement.
     _logo_png_v2 = os.path.join(img_media, "logo_v2.png")

@@ -19,7 +19,7 @@ from configuration import Config
 from data_helper import device_amount
 from models import Payment, ProviderOrClient
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
@@ -32,6 +32,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QFrame,
+    QAbstractItemView,
+    QHeaderView,
 )
 from ui.payment_edit_add import EditOrAddPaymentrDialog
 from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
@@ -432,6 +434,24 @@ class ProviderOrClientTableWidget(QListWidget):
 
         if hasattr(self.parent, "update_accounts_count"):
             self.parent.update_accounts_count()
+        self._autosize_width_to_longest_text()
+
+    def _autosize_width_to_longest_text(self):
+        """Ajuste la largeur pour contenir le texte le plus long (par défaut)."""
+        fm = QFontMetrics(self.font())
+        max_w = 0
+        for i in range(self.count()):
+            it = self.item(i)
+            if it is None:
+                continue
+            max_w = max(max_w, fm.horizontalAdvance(it.text()))
+
+        padding = 24
+        icon_space = 36
+        scrollbar_space = 18 if self.verticalScrollBar().isVisible() else 0
+        target = max_w + padding + icon_space + scrollbar_space
+        if target > 0:
+            self.setMinimumWidth(target)
 
     def handleClicked(self):
         item = self.currentItem()
@@ -463,7 +483,8 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
 
         self.provid_clt = provid_clt
         self.list_entry_mode = list_entry_mode
-        self.setSizeHint(QSize(0, 35))  # Hauteur légèrement augmentée pour le style moderne
+        self._item_height = 35
+        self.setSizeHint(QSize(0, self._item_height))  # Hauteur légèrement augmentée pour le style moderne
         icon = QIcon()
 
         if not isinstance(self.provid_clt, str):
@@ -492,6 +513,7 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
                 self.setText(
                     f"📋 {self.provid_clt.name} — {n} opération(s) en corbeille"
                 )
+                self._update_min_width_from_text()
                 return
             prefix = "⚠️ " if self.provid_clt.is_indebted() else "👤 "
             self.setText(f"{prefix}{self.provid_clt.name}")
@@ -503,6 +525,13 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
             self.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if not Config.DEVISE_PEP_PROV:
                 self.setText("📋 Tous les comptes")
+        self._update_min_width_from_text()
+
+    def _update_min_width_from_text(self):
+        """Ajuste la largeur minimale de l'item selon son texte (avec marge + icône)."""
+        fm = QFontMetrics(self.font())
+        min_w = fm.horizontalAdvance(self.text()) + 48
+        self.setSizeHint(QSize(max(0, int(min_w)), self._item_height))
 
     @property
     def provid_clt_id(self):
@@ -527,6 +556,17 @@ class RapportTableWidget(FTableWidget):
         self.provider_clt = None
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._popup_row)
+
+        # Libellé = colonne qui prend la largeur max
+        header = self.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.verticalHeader().setVisible(False)
 
     def _format_for_table(self, value):
         from decimal import Decimal
@@ -734,6 +774,18 @@ class RapportCISSTableWidget(FTableWidget):
         self.provider_clt = None
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._popup_row)
+
+        # Libellé = colonne qui prend la largeur max
+        header = self.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.verticalHeader().setVisible(False)
 
     def _item_for_data(self, row, column, data, context=None):
         from decimal import Decimal

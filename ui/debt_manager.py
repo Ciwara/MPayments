@@ -21,7 +21,7 @@ from configuration import Config
 from data_helper import device_amount
 from models import Payment, ProviderOrClient
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QShortcut, QKeySequence
+from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (QGridLayout, QHBoxLayout, QListWidget,
                              QListWidgetItem, QMenu, QSplitter, QFrame, QVBoxLayout, QLabel,
                              QAbstractItemView, QHeaderView, QComboBox)
@@ -186,10 +186,10 @@ class DebtsViewWidget(FWidget):
         self.button = Button("🔄")
         self.button.clicked.connect(self.refresh_period)
 
-        self.btt_pdf_export = Button("📄")
+        self.btt_pdf_export = Button("PDF")
         self.btt_pdf_export.clicked.connect(self.export_pdf)
         
-        self.btt_xlsx_export = Button("📊")
+        self.btt_xlsx_export = Button("XLSX")
         self.btt_xlsx_export.clicked.connect(self.export_xlsx)
         logger.debug("Boutons d'export configurés avec style moderne")
 
@@ -471,6 +471,25 @@ class ProviderOrClientTableWidget(QListWidget):
 
         if hasattr(self.parent, "update_accounts_count"):
             self.parent.update_accounts_count()
+        self._autosize_width_to_longest_text()
+
+    def _autosize_width_to_longest_text(self):
+        """Ajuste la largeur pour contenir le texte le plus long (par défaut)."""
+        fm = QFontMetrics(self.font())
+        max_w = 0
+        for i in range(self.count()):
+            it = self.item(i)
+            if it is None:
+                continue
+            max_w = max(max_w, fm.horizontalAdvance(it.text()))
+
+        # Padding + icône + marge + scrollbar (approx) pour éviter la troncature
+        padding = 24
+        icon_space = 36
+        scrollbar_space = 18 if self.verticalScrollBar().isVisible() else 0
+        target = max_w + padding + icon_space + scrollbar_space
+        if target > 0:
+            self.setMinimumWidth(target)
 
     def handleClicked(self):
         # Peut être déclenché sans item courant (ex: refresh/clear en cours)
@@ -505,7 +524,8 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
         from PyQt6.QtCore import QSize
 
         self.provid_clt = provid_clt
-        self.setSizeHint(QSize(0, 30))
+        self._item_height = 30
+        self.setSizeHint(QSize(0, self._item_height))
         icon = QIcon()
 
         if not isinstance(self.provid_clt, str):
@@ -534,6 +554,16 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
             self.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if not Config.DEVISE_PEP_PROV:
                 self.setText("Tous")
+        self._update_min_width_from_text()
+
+    def _update_min_width_from_text(self):
+        """Ajuste la largeur minimale de l'item selon son texte (avec marge + icône)."""
+        from PyQt6.QtCore import QSize
+
+        fm = QFontMetrics(self.font())
+        # marge + espace icône (approx) pour éviter la troncature
+        min_w = fm.horizontalAdvance(self.text()) + 48
+        self.setSizeHint(QSize(max(0, int(min_w)), self._item_height))
 
     @property
     def provid_clt_id(self):

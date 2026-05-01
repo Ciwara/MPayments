@@ -5,6 +5,7 @@
 from __future__ import unicode_literals, absolute_import, division, print_function
 
 from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 from Common.ui.common import FWidget
 from Common.ui.cmenutoolbar import FMenuToolBar
@@ -50,3 +51,12 @@ class MenuToolBar(FMenuToolBar, FWidget):
                 m.get("name"),
                 lambda m=m: self.goto(m.get("goto")),
             )
+
+        # Afficher la version à droite (sans gêner les actions)
+        spacer = QWidget(self)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.addWidget(spacer)
+
+        self.app_version_label = QLabel(f"v{Config.APP_VERSION}", self)
+        self.app_version_label.setStyleSheet("color: palette(mid); font-size: 10px; padding: 0 6px;")
+        self.addWidget(self.app_version_label)
