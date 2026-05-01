@@ -510,9 +510,7 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
 
     def init_text(self):
         try:
-            solde = self.provid_clt.last_remaining()
-            montant = device_amount(solde, self.provid_clt)
-            self.setText(f"{self.provid_clt.name} — {montant}")
+            self.setText(self.provid_clt.name)
         except AttributeError:
             font = QFont()
             font.setBold(True)

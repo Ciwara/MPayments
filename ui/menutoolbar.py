@@ -21,7 +21,7 @@ class MenuToolBar(FMenuToolBar, FWidget):
 
         menu = [
             {
-                "name": "📊 Tableau de Bord",
+                "name": "Tableau de Bord",
                 "icon": "state",
                 "admin": False,
                 "shortcut": "Ctrl+D",
