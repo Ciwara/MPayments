@@ -3,6 +3,6 @@
 # maintainer: Fad
 
 from .configuration import Config
-from .models import ProviderOrClient, Payment, database
+from .models import Activity, ProviderOrClient, Payment, database
 
-__all__ = ['Config', 'ProviderOrClient', 'Payment', 'database'] 
+__all__ = ['Config', 'Activity', 'ProviderOrClient', 'Payment', 'database'] 
