@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt
 from Common.ui.util import check_is_empty, field_error
 from Common.ui.common import FWidget, Button, FormLabel, LineEdit, IntLineEdit
 import peewee
-from models import ProviderOrClient
+from models import Activity, ProviderOrClient
 
 from configuration import Config
 
@@ -178,6 +178,25 @@ class EditOrAddClientOrProviderDialog(QDialog, FWidget):
         if self.new:
             prov_clt.type_ = self.box_type.currentData()
             logger.debug(f"Type sélectionné: {prov_clt.type_}")
+            # Rattacher le compte à l'activité courante
+            activity = None
+            parent_view = getattr(self.table_p, "parent", None)
+            if parent_view is not None and hasattr(parent_view, "current_activity"):
+                activity = parent_view.current_activity()
+            if activity is None:
+                activity = Activity.get_current()
+            prov_clt.activity = activity
+
+        activity = getattr(prov_clt, "activity", None) or Activity.get_current()
+        exclude_id = None if self.new else getattr(prov_clt, "id", None)
+        if ProviderOrClient.name_exists_in_activity(
+            prov_clt.name, activity, exclude_id=exclude_id
+        ):
+            field_error(
+                self.nameField,
+                "Ce nom existe déjà pour cette activité.",
+            )
+            return
 
         if Config.DEVISE_PEP_PROV:
             prov_clt.devise = str(self.box_devise.currentText().split()[1])
@@ -206,7 +225,7 @@ class EditOrAddClientOrProviderDialog(QDialog, FWidget):
             )
         except peewee.IntegrityError as e:
             logger.error(f"Erreur d'intégrité lors de la sauvegarde: {str(e)}")
-            field_error(self.nameField, "Ce nom existe déjà dans la base de données.")
+            field_error(self.nameField, "Ce nom existe déjà pour cette activité.")
         except Exception as e:
             logger.error(f"Erreur inattendue lors de la sauvegarde: {str(e)}")
             self.parent.Notify(

@@ -5,7 +5,7 @@
 from Common.models import Settings
 from Common.ui.common import FMainWindow
 from configuration import Config
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QToolBar
 from ui.debt_manager import DebtsViewWidget
@@ -16,18 +16,21 @@ from ui.menutoolbar import MenuToolBar
 class MainWindow(FMainWindow):
     def __init__(self):
         FMainWindow.__init__(self)
-        
+
+        self._activity_chosen_this_session = False
+        self._prompting_activity = False
+
         # Configuration du titre de la fenêtre principale
         self.title = "Fenêtre principale"
         self.setWindowTitle(f"{Config.APP_NAME} - {self.title}")
 
         # Configuration de l'icône de la fenêtre
         self.setWindowIcon(QIcon.fromTheme("logo", QIcon("{}".format(Config.APP_LOGO))))
-        
+
         # Initialisation de la barre de menu
         self.menubar = MenuBar(self)
         self.setMenuBar(self.menubar)
-        
+
         # Configuration de la barre d'outils selon les paramètres
         self._setup_toolbar()
 
@@ -40,7 +43,7 @@ class MainWindow(FMainWindow):
     def refresh_menu_after_login(self):
         """
         Appelé par `Common.cmain` après une connexion (ou auto-connexion).
-        Reconstruit les menus/toolbar afin d'afficher l'utilisateur connecté.
+        Reconstruit les menus/toolbar puis demande l'activité à utiliser.
         """
         try:
             self.menubar = MenuBar(self)
@@ -48,11 +51,87 @@ class MainWindow(FMainWindow):
         except Exception:
             pass
 
-        # La toolbar dépend aussi parfois du contexte utilisateur
         try:
             self._setup_toolbar()
         except Exception:
             pass
+
+        self.apply_saved_theme()
+        # Après fermeture du dialogue de login (évite les modales imbriquées)
+        QTimer.singleShot(0, self.prompt_activity_after_login)
+
+    def prompt_activity_after_login(self):
+        """Force le choix d'une activité juste après le login (une fois par session)."""
+        if self._activity_chosen_this_session or self._prompting_activity:
+            return
+        self._prompting_activity = True
+        try:
+            if self.select_activity(required=True):
+                self._activity_chosen_this_session = True
+                self.reload_current_view()
+                self.sync_activity_ui()
+        finally:
+            self._prompting_activity = False
+
+    def select_activity(self, required=True):
+        """
+        Affiche le dialogue de choix d'activité.
+        required=True : obligatoire (post-login) ; False : changement optionnel.
+        """
+        from PyQt6.QtWidgets import QDialog
+        from ui.activity_select import SelectActivityDialog
+
+        dlg = SelectActivityDialog(parent=self, required=required)
+        result = dlg.exec()
+        if result == QDialog.DialogCode.Accepted and dlg.selected_activity:
+            self._update_window_title_activity(dlg.selected_activity)
+            return True
+        return False
+
+    def switch_activity(self):
+        """Changer d'activité pendant la session (menu / raccourci)."""
+        if self.select_activity(required=False):
+            self._activity_chosen_this_session = True
+            self.reload_current_view()
+            self.sync_activity_ui()
+            try:
+                from models import Activity
+
+                act = Activity.get_current()
+                self.Notify(f"Activité « {act.name} » sélectionnée", "success")
+            except Exception:
+                pass
+
+    def reload_current_view(self):
+        """Recharge la vue centrale pour appliquer le filtre d'activité."""
+        view = getattr(self, "view_widget", None)
+        context_cls = type(view) if view is not None else DebtsViewWidget
+        try:
+            self.change_context(context_cls)
+        except Exception:
+            self.change_context(DebtsViewWidget)
+
+    def sync_activity_ui(self):
+        """Met à jour le titre et le label activité de la toolbar."""
+        try:
+            from models import Activity
+
+            activity = Activity.get_current()
+            self._update_window_title_activity(activity)
+        except Exception:
+            activity = None
+
+        toolbar = getattr(self, "toolbar", None)
+        if toolbar is not None and hasattr(toolbar, "refresh_activity_label"):
+            try:
+                toolbar.refresh_activity_label()
+            except Exception:
+                pass
+
+    def _update_window_title_activity(self, activity):
+        name = getattr(activity, "name", "") or ""
+        suffix = f" — {name}" if name else ""
+        self.setWindowTitle(f"{Config.APP_NAME}{suffix}")
 
     def apply_saved_theme(self):
         """Applique le thème (Settings.theme) au démarrage."""
@@ -127,6 +206,16 @@ class MainWindow(FMainWindow):
         """Retourne la largeur de la page avec une marge"""
         return self.width() - 100
 
+    def logout(self):
+        """Déconnexion : remet le choix d'activité pour la prochaine session."""
+        self._activity_chosen_this_session = False
+        try:
+            super().logout()
+        except Exception:
+            from Common.models import Owner
+
+            Owner.update(is_identified=False).where(Owner.is_identified == True).execute()
+
     def exit(self):
         """Méthode de sortie propre de l'application"""
         try:
@@ -145,8 +234,5 @@ class MainWindow(FMainWindow):
                 pass
 
     def on_login_success(self):
-        """Appelé après une connexion réussie"""
-        print('Login successful')
-        # Initialisation de la barre de menu
+        """Appelé après une connexion réussie (si le hook est utilisé)."""
         self.refresh_menu_after_login()
-        self.apply_saved_theme()

@@ -18,7 +18,7 @@ from peewee import (
     TextField,
     SqliteDatabase,
 )
-from Common.models import BaseModel, FileJoin, Owner
+from Common.models import BaseModel, FileJoin, Organization, Owner
 from data_helper import device_amount
 
 # Configuration du logger
@@ -41,6 +41,133 @@ FDATE = u"%c"
 NOW = datetime.now()
 
 
+class Activity(BaseModel):
+    """Activité (contexte métier) d'une organisation : comptes et paiements isolés."""
+
+    DEFAULT_NAME = "Principale"
+
+    organization = ForeignKeyField(
+        Organization, null=True, backref="activities", on_delete="SET NULL"
+    )
+    owner = ForeignKeyField(
+        Owner, null=True, backref="activities", on_delete="SET NULL"
+    )
+    name = CharField(verbose_name="Nom de l'activité")
+    description = TextField(null=True, verbose_name="Description")
+    is_current = BooleanField(default=False)
+    deleted = BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+    def __unicode__(self):
+        return self.__str__()
+
+    def display_name(self):
+        return self.name
+
+    def accounts(self):
+        return ProviderOrClient.select().where(
+            ProviderOrClient.activity == self,
+            ProviderOrClient.deleted == False,
+        )
+
+    def payments(self):
+        account_ids = [a.id for a in self.accounts()]
+        if not account_ids:
+            return Payment.select().where(Payment.id == -1)
+        return Payment.select().where(
+            Payment.provider_clt.in_(account_ids),
+            Payment.deleted == False,
+        )
+
+    def delete_data(self):
+        """Soft-delete l'activité et ses comptes (paiements inclus)."""
+        self.deleted = True
+        self.is_current = False
+        self.save()
+        for account in ProviderOrClient.select().where(ProviderOrClient.activity == self):
+            account.delete_data()
+
+    def restore_data(self):
+        self.deleted = False
+        self.save()
+
+    @classmethod
+    def active_query(cls):
+        return cls.select().where(cls.deleted == False).order_by(cls.name)
+
+    @classmethod
+    def get_current(cls):
+        try:
+            return cls.get(cls.is_current == True, cls.deleted == False)
+        except cls.DoesNotExist:
+            return cls.ensure_default()
+
+    @classmethod
+    def set_current(cls, activity):
+        if activity is None or getattr(activity, "deleted", False):
+            return None
+        cls.update(is_current=False).where(cls.deleted == False).execute()
+        activity.is_current = True
+        activity.save()
+        return activity
+
+    @classmethod
+    def ensure_default(cls):
+        """Garantit au moins une activité courante (migration / première install)."""
+        try:
+            current = cls.get(cls.is_current == True, cls.deleted == False)
+            return current
+        except cls.DoesNotExist:
+            pass
+
+        try:
+            existing = cls.active_query().first()
+            if existing:
+                return cls.set_current(existing)
+        except Exception:
+            pass
+
+        org = None
+        try:
+            org = Organization.get_by_id(1)
+        except Exception:
+            try:
+                org = Organization.select().first()
+            except Exception:
+                org = None
+
+        owner = None
+        try:
+            owner = Owner.get(Owner.is_identified == True)
+        except Exception:
+            try:
+                owner = Owner.select().first()
+            except Exception:
+                owner = None
+
+        activity = cls.create(
+            organization=org,
+            owner=owner,
+            name=cls.DEFAULT_NAME,
+            description="Activité par défaut",
+            is_current=True,
+            deleted=False,
+        )
+        return activity
+
+    @classmethod
+    def name_exists(cls, name, exclude_id=None):
+        qs = cls.select().where(
+            cls.name == name.strip(),
+            cls.deleted == False,
+        )
+        if exclude_id:
+            qs = qs.where(cls.id != exclude_id)
+        return qs.exists()
+
+
 class ProviderOrClient(BaseModel):
 
     """Represents the company emmiting the invoices"""
@@ -57,7 +184,10 @@ class ProviderOrClient(BaseModel):
     EURO = "euro"
     DEVISE = {USA: "$", XOF: "F", EURO: "€"}
 
-    name = CharField(unique=True, verbose_name="Nom de votre entreprise")
+    activity = ForeignKeyField(
+        Activity, null=True, backref="provider_clients", on_delete="SET NULL"
+    )
+    name = CharField(verbose_name="Nom de votre entreprise")
     address = TextField(null=True, verbose_name="Adresse principale de votre société")
     phone = IntegerField(
         null=True, verbose_name="Numero de téléphone de votre entreprise"
@@ -75,6 +205,19 @@ class ProviderOrClient(BaseModel):
     )
     devise = CharField(choices=DEVISE, default=XOF)
     deleted = BooleanField(default=False)
+
+    @classmethod
+    def name_exists_in_activity(cls, name, activity, exclude_id=None):
+        if activity is None:
+            return False
+        qs = cls.select().where(
+            cls.name == name.strip(),
+            cls.activity == activity,
+            cls.deleted == False,
+        )
+        if exclude_id:
+            qs = qs.where(cls.id != exclude_id)
+        return qs.exists()
 
     def payments(self):
         return Payment.select().where(Payment.provider_clt == self)

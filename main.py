@@ -29,7 +29,7 @@ _cstatic.APP_NAME = Config.APP_NAME
 def _register_cleanable_models():
     """Tables proposées dans Common.ui.clean_db (cases à cocher + ordre / prérequis FK)."""
     from Common.models import Organization, Owner, Settings
-    from models import Payment, ProviderOrClient
+    from models import Activity, Payment, ProviderOrClient
 
     cm = _cstatic.CLEANABLE_MODELS
     cm.clear()
@@ -37,6 +37,7 @@ def _register_cleanable_models():
         [
             ("Paiements", Payment),
             ("Comptes clients / fournisseurs", ProviderOrClient),
+            ("Activités", Activity),
             ("Paramètres", Settings),
             ("Organisation", Organization),
             ("Utilisateurs", Owner),
@@ -47,6 +48,7 @@ def _register_cleanable_models():
     prereq.update(
         {
             ProviderOrClient: [Payment],
+            Activity: [ProviderOrClient, Payment],
             Owner: [Payment],
         }
     )

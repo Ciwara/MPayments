@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget
 from Common.ui.common import FWidget
 from Common.ui.cmenutoolbar import FMenuToolBar
 from configuration import Config
+from models import Activity
 
 
 class MenuToolBar(FMenuToolBar, FWidget):
@@ -52,11 +53,33 @@ class MenuToolBar(FMenuToolBar, FWidget):
                 lambda m=m: self.goto(m.get("goto")),
             )
 
-        # Afficher la version à droite (sans gêner les actions)
+        # Afficher activité courante + version à droite (lecture seule)
         spacer = QWidget(self)
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.addWidget(spacer)
 
+        self.activity_label = QLabel("", self)
+        self.activity_label.setStyleSheet(
+            "color: palette(window-text); font-size: 11px; font-weight: 600; padding: 0 8px;"
+        )
+        self.activity_label.setToolTip(
+            "Activité courante — pour changer : menu Activités → Changer d'activité…"
+        )
+        self.addWidget(self.activity_label)
+
         self.app_version_label = QLabel(f"v{Config.APP_VERSION}", self)
-        self.app_version_label.setStyleSheet("color: palette(mid); font-size: 10px; padding: 0 6px;")
+        self.app_version_label.setStyleSheet(
+            "color: palette(mid); font-size: 10px; padding: 0 6px;"
+        )
         self.addWidget(self.app_version_label)
+
+        self.refresh_activity_label()
+
+    def refresh_activity_label(self):
+        """Met à jour l'affichage de l'activité courante (sans permettre le changement)."""
+        try:
+            activity = Activity.get_current()
+            name = activity.name if activity else "—"
+        except Exception:
+            name = "—"
+        self.activity_label.setText(f"Activité : {name}")

@@ -19,7 +19,7 @@ from Common.ui.table import FTableWidget, TotalsWidget
 from Common.ui.util import format_number_table_no_round, is_float
 from configuration import Config
 from data_helper import device_amount
-from models import Payment, ProviderOrClient
+from models import Activity, Payment, ProviderOrClient
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (QGridLayout, QHBoxLayout, QListWidget,
@@ -81,6 +81,45 @@ def precise_calculation(amount, precision=2):
     except:
         return round(float(amount), precision)
 
+# Affichage date/heure des mouvements : jj/mm/yyyy h:m
+MOVEMENT_DATE_FORMAT = "%d/%m/%Y %H:%M"
+
+
+def format_movement_date(date_val):
+    """Formate une date de mouvement en jj/mm/yyyy h:m."""
+    if date_val is None or date_val == "":
+        return ""
+    if isinstance(date_val, datetime):
+        return date_val.strftime(MOVEMENT_DATE_FORMAT)
+    if hasattr(date_val, "strftime") and not hasattr(date_val, "hour"):
+        # date sans heure
+        return date_val.strftime("%d/%m/%Y")
+    if isinstance(date_val, str):
+        text = date_val.strip()
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%d-%m-%Y %H:%M:%S",
+            "%d-%m-%Y %H:%M",
+            "%Y-%m-%d",
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+        ):
+            try:
+                parsed = datetime.strptime(text, fmt)
+                if fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                    return parsed.strftime("%d/%m/%Y")
+                return parsed.strftime(MOVEMENT_DATE_FORMAT)
+            except ValueError:
+                continue
+        return text
+    return str(date_val)
+
+
 def calculate_running_balance(payments_data):
     """Calcule les balances courantes correctement pour une liste de paiements"""
     calculated_data = []
@@ -135,18 +174,6 @@ class DebtsViewWidget(FWidget):
         # self.label_owner.setFont(QFont("Segoe UI", 12, QFont.DemiBold))
         # self.label_owner.setFixedHeight(50)
 
-        # Configuration optimisée de la table avec style moderne
-        if Config.CISS:
-            logger.debug("Configuration CISS activée")
-            self.table = RapportCISSTableWidget(parent=self)
-        else:
-            logger.debug("Configuration CISS désactivée")
-            self.table = RapportTableWidget(parent=self)
-        
-        # Table des fournisseurs/clients avec style moderne  
-        self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
-        logger.debug("Table des fournisseurs/clients initialisée avec style moderne")
-
         # Filtre par type de compte (Clients / Fournisseurs / Tous)
         self.type_filter_combo = QComboBox()
         self.type_filter_combo.addItems(["Clients", "Fournisseurs", "Tous"])
@@ -163,6 +190,18 @@ class DebtsViewWidget(FWidget):
         self.search_count_label = QLabel("0 compte(s)")
         self.search_count_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
         logger.debug("Label nombre de résultats configuré")
+
+        # Configuration optimisée de la table avec style moderne
+        if Config.CISS:
+            logger.debug("Configuration CISS activée")
+            self.table = RapportCISSTableWidget(parent=self)
+        else:
+            logger.debug("Configuration CISS désactivée")
+            self.table = RapportTableWidget(parent=self)
+
+        # Table des fournisseurs/clients avec style moderne
+        self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
+        logger.debug("Table des fournisseurs/clients initialisée avec style moderne")
 
         # Raccourci clavier Nouveau compte
         QShortcut(QKeySequence("Ctrl+N"), self, self.add_prov_or_clt)
@@ -204,6 +243,7 @@ class DebtsViewWidget(FWidget):
         left_layout.setSpacing(10)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(left_title)
+
         type_label = QLabel("Afficher :")
         type_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
         left_layout.addWidget(type_label)
@@ -309,6 +349,10 @@ class DebtsViewWidget(FWidget):
             logger.debug("Données rafraîchies")
         else:
             logger.debug("Utilisation des données en cache")
+
+    def current_activity(self):
+        """Activité courante (choisie uniquement via le popup)."""
+        return Activity.get_current()
 
     def _on_type_filter_changed(self, _text):
         """Recharge la liste selon le type (Clients / Fournisseurs / Tous)."""
@@ -455,7 +499,15 @@ class ProviderOrClientTableWidget(QListWidget):
         if hasattr(self.parent, "type_filter_combo"):
             type_filter = self.parent.type_filter_combo.currentText()
 
+        activity = None
+        if hasattr(self.parent, "current_activity"):
+            activity = self.parent.current_activity()
+        else:
+            activity = Activity.get_current()
+
         qs = ProviderOrClient.select().where(ProviderOrClient.deleted == False)
+        if activity is not None:
+            qs = qs.where(ProviderOrClient.activity == activity)
         if type_filter == "Clients":
             qs = qs.where(ProviderOrClient.type_ == ProviderOrClient.CLT)
         elif type_filter == "Fournisseurs":
@@ -594,20 +646,13 @@ class RapportTableWidget(FTableWidget):
         self.parent = parent
 
         self.sorter = False
-        self.stretch_columns = [0, 1, 2, 3, 4]
+        # Seul le libellé absorbe la largeur restante (apply_resize_rules)
+        self.stretch_columns = [1]
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r"}
         self.ecart = -15
         self.display_vheaders = False
-        
-        # Configuration moderne du tableau
-        header = self.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        
+        self._libelle_column = 1
+
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
@@ -618,15 +663,33 @@ class RapportTableWidget(FTableWidget):
         self.totals_debit = 0.0
         self.totals_credit = 0.0
         self.balance_tt = 0.0
+        self._apply_column_resize_modes()
+
+    def _apply_column_resize_modes(self):
+        """Date/montants au contenu ; libellé prend tout le reste."""
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
+        last_col = len(self.hheaders) - 1
+        libelle_col = getattr(self, "_libelle_column", 1)
+        for col in range(header.count() or len(self.hheaders)):
+            if col == last_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            elif col == libelle_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+            else:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
 
     def _format_for_table(self, value):
-        """Montants : affichage sans arrondi imposé (décimales telles qu’en base, zéros de fin retirés)."""
+        """Montants + dates jj/mm/yyyy h:m."""
         from decimal import Decimal
+        from datetime import date as date_cls
 
         if isinstance(value, float):
             return format_number_table_no_round(value)
         if isinstance(value, Decimal):
             return format_number_table_no_round(value)
+        if isinstance(value, (datetime, date_cls)):
+            return format_movement_date(value)
         return super()._format_for_table(value)
 
     def refresh_(self, provid_clt_id=None, search=None):
@@ -647,6 +710,23 @@ class RapportTableWidget(FTableWidget):
             self.parent.display_balance(device_amount(self.balance_tt, provid_clt_id))
         )
         self.hideColumn(len(self.hheaders) - 1)
+        self._apply_column_resize_modes()
+
+    def _activity_account_ids(self):
+        activity = None
+        if hasattr(self.parent, "current_activity"):
+            activity = self.parent.current_activity()
+        else:
+            activity = Activity.get_current()
+        if activity is None:
+            return None
+        return [
+            a.id
+            for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                ProviderOrClient.activity == activity,
+                ProviderOrClient.deleted == False,
+            )
+        ]
 
     def set_data_for(self, provid_clt_id=None, search=None):
         """Récupération et calcul des données avec validation"""
@@ -670,10 +750,23 @@ class RapportTableWidget(FTableWidget):
             logger.debug(f"Filtre sur le compte: {self.provider_clt.name}")
         else:
             self.provider_clt = "Tous"
+            account_ids = self._activity_account_ids()
+            if account_ids is not None:
+                if account_ids:
+                    qs = qs.where(Payment.provider_clt.in_(account_ids))
+                else:
+                    qs = qs.where(Payment.id == -1)
             try:
-                for prov in ProviderOrClient.select().where(
-                    ProviderOrClient.type_ == ProviderOrClient.CLT
-                ):
+                prov_qs = ProviderOrClient.select().where(
+                    ProviderOrClient.type_ == ProviderOrClient.CLT,
+                    ProviderOrClient.deleted == False,
+                )
+                if account_ids is not None:
+                    if account_ids:
+                        prov_qs = prov_qs.where(ProviderOrClient.id.in_(account_ids))
+                    else:
+                        prov_qs = prov_qs.where(ProviderOrClient.id == -1)
+                for prov in prov_qs:
                     self.remaining += prov.last_remaining()
             except Exception as e:
                 logger.warning(f"Erreur calcul remaining total: {e}")
@@ -682,9 +775,16 @@ class RapportTableWidget(FTableWidget):
         
         self.parent.label_owner.setText(msg)
 
-        # Récupération des données brutes
+        # Récupération des données brutes (date déjà en jj/mm/yyyy h:m)
         raw_data = [
-            (pay.date, pay.libelle, pay.debit, pay.credit, pay.balance, pay.id)
+            (
+                format_movement_date(pay.date),
+                pay.libelle,
+                pay.debit,
+                pay.credit,
+                pay.balance,
+                pay.id,
+            )
             for pay in qs.iterator()
         ]
         
@@ -778,12 +878,8 @@ class RapportTableWidget(FTableWidget):
         )
 
     def _format_date_for_export(self, date_val):
-        """Formate une date pour l'export PDF (lisible)."""
-        if date_val is None:
-            return ""
-        if hasattr(date_val, "strftime"):
-            return date_val.strftime("%d/%m/%Y")
-        return str(date_val)[:10] if len(str(date_val)) >= 10 else str(date_val)
+        """Formate une date pour l'export PDF/XLSX (jj/mm/yyyy h:m)."""
+        return format_movement_date(date_val)
 
     def dict_data(self):
         """Données d'export PDF/XLSX : titre, en-têtes, lignes formatées + totaux, période, infos compte."""
@@ -911,25 +1007,44 @@ class RapportCISSTableWidget(FTableWidget):
         self.parent = parent
 
         self.sorter = False
-        self.stretch_columns = [0, 1, 2, 3, 4, 5]
+        self.stretch_columns = [1]
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r", 5: "r"}
         self.display_vheaders = False
-        
-        # Configuration moderne du tableau
-        header = self.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        
+        self._libelle_column = 1
+
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
         self.setShowGrid(True)
         self.provider_clt = None
+        self._apply_column_resize_modes()
+
+    def _apply_column_resize_modes(self):
+        """Date/poids/montants au contenu ; libellé prend tout le reste."""
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
+        last_col = len(self.hheaders) - 1
+        libelle_col = getattr(self, "_libelle_column", 1)
+        for col in range(header.count() or len(self.hheaders)):
+            if col == last_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            elif col == libelle_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+            else:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+
+    def _format_for_table(self, value):
+        """Montants + dates jj/mm/yyyy h:m."""
+        from decimal import Decimal
+        from datetime import date as date_cls
+
+        if isinstance(value, float):
+            return format_number_table_no_round(value)
+        if isinstance(value, Decimal):
+            return format_number_table_no_round(value)
+        if isinstance(value, (datetime, date_cls)):
+            return format_movement_date(value)
+        return super()._format_for_table(value)
 
     def _item_for_data(self, row, column, data, context=None):
         """Poids et montants : pas d’arrondi fixe (aligné sur les valeurs stockées)."""
@@ -964,6 +1079,23 @@ class RapportCISSTableWidget(FTableWidget):
             self.parent.display_balance(device_amount(self.balance_tt, provid_clt_id))
         )
         self.hideColumn(len(self.hheaders) - 1)
+        self._apply_column_resize_modes()
+
+    def _activity_account_ids(self):
+        activity = None
+        if hasattr(self.parent, "current_activity"):
+            activity = self.parent.current_activity()
+        else:
+            activity = Activity.get_current()
+        if activity is None:
+            return None
+        return [
+            a.id
+            for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                ProviderOrClient.activity == activity,
+                ProviderOrClient.deleted == False,
+            )
+        ]
 
     def set_data_for(self, provid_clt_id=None, search=None):
         """Récupération des données CISS avec calculs de poids"""
@@ -981,14 +1113,27 @@ class RapportCISSTableWidget(FTableWidget):
             self.provider_clt = ProviderOrClient.get(id=provid_clt_id)
             qs = qs.select().where(Payment.provider_clt == self.provider_clt)
             msg = "<h3>Compte : {}</h3> <h4>Tel: {}</h4>".format(
-                self.provider_clt.name, self.provider_clt.phone
+                self.provider_clt.name, self.provider_cl.phone
             )
         else:
             self.provider_clt = "Tous"
+            account_ids = self._activity_account_ids()
+            if account_ids is not None:
+                if account_ids:
+                    qs = qs.where(Payment.provider_clt.in_(account_ids))
+                else:
+                    qs = qs.where(Payment.id == -1)
             try:
-                for prov in ProviderOrClient.select().where(
-                    ProviderOrClient.type_ == ProviderOrClient.CLT
-                ):
+                prov_qs = ProviderOrClient.select().where(
+                    ProviderOrClient.type_ == ProviderOrClient.CLT,
+                    ProviderOrClient.deleted == False,
+                )
+                if account_ids is not None:
+                    if account_ids:
+                        prov_qs = prov_qs.where(ProviderOrClient.id.in_(account_ids))
+                    else:
+                        prov_qs = prov_qs.where(ProviderOrClient.id == -1)
+                for prov in prov_qs:
                     self.remaining += prov.last_remaining()
             except Exception as e:
                 logger.warning(f"Erreur calcul remaining CISS: {e}")
@@ -999,7 +1144,15 @@ class RapportCISSTableWidget(FTableWidget):
 
         # Récupération avec poids et recalcul des balances
         raw_data = [
-            (pay.date, pay.libelle, pay.weight, pay.debit, pay.credit, pay.balance, pay.id)
+            (
+                format_movement_date(pay.date),
+                pay.libelle,
+                pay.weight,
+                pay.debit,
+                pay.credit,
+                pay.balance,
+                pay.id,
+            )
             for pay in qs.iterator()
         ]
         

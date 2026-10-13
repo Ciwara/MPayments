@@ -17,7 +17,8 @@ from Common.ui.table import FTableWidget, TotalsWidget
 from Common.ui.util import format_number_table_no_round, is_float
 from configuration import Config
 from data_helper import device_amount
-from models import Payment, ProviderOrClient
+from models import Activity, Payment, ProviderOrClient
+from ui.debt_manager import format_movement_date
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
 from PyQt6.QtWidgets import (
@@ -209,6 +210,10 @@ class DebtsTrashViewWidget(FWidget):
     def format_balance_text(self, amount_text: str) -> str:
         return amount_text if self._show_balance_amounts else "••••"
 
+    def current_activity(self):
+        """Activité courante (choisie uniquement via le popup)."""
+        return Activity.get_current()
+
     def refresh_period(self):
         logger.debug("Rafraîchissement de la période")
         self.table.refresh_()
@@ -399,9 +404,17 @@ class ProviderOrClientTableWidget(QListWidget):
                 return q.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR)
             return q
 
+        activity = None
+        if hasattr(self.parent, "current_activity"):
+            activity = self.parent.current_activity()
+        else:
+            activity = Activity.get_current()
+
         qs_deleted = _apply_type(
             ProviderOrClient.select().where(ProviderOrClient.deleted == True)
         )
+        if activity is not None:
+            qs_deleted = qs_deleted.where(ProviderOrClient.activity == activity)
 
         pclt_ids = [
             row.provider_clt_id
@@ -416,6 +429,8 @@ class ProviderOrClientTableWidget(QListWidget):
                     ProviderOrClient.id.in_(pclt_ids),
                 )
             )
+            if activity is not None:
+                qs_ops = qs_ops.where(ProviderOrClient.activity == activity)
         else:
             qs_ops = None
 
@@ -549,32 +564,42 @@ class RapportTableWidget(FTableWidget):
         self.parent = parent
 
         self.sorter = False
-        self.stretch_columns = [0, 1, 2, 3, 4]
+        self.stretch_columns = [1]
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r"}
         self.ecart = -15
         self.display_vheaders = False
         self.provider_clt = None
+        self._libelle_column = 1
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._popup_row)
 
-        # Libellé = colonne qui prend la largeur max
-        header = self.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
+        self._apply_column_resize_modes()
+
+    def _apply_column_resize_modes(self):
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
+        last_col = len(self.hheaders) - 1
+        libelle_col = getattr(self, "_libelle_column", 1)
+        for col in range(header.count() or len(self.hheaders)):
+            if col == last_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            elif col == libelle_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+            else:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
 
     def _format_for_table(self, value):
         from decimal import Decimal
+        from datetime import date as date_cls
 
         if isinstance(value, float):
             return format_number_table_no_round(value)
         if isinstance(value, Decimal):
             return format_number_table_no_round(value)
+        if isinstance(value, (datetime, date_cls)):
+            return format_movement_date(value)
         return super()._format_for_table(value)
 
     def refresh_(self, provid_clt_id=None, search=None):
@@ -592,6 +617,7 @@ class RapportTableWidget(FTableWidget):
             self.parent.display_balance(device_amount(self.balance_tt, provid_clt_id))
         )
         self.hideColumn(len(self.hheaders) - 1)
+        self._apply_column_resize_modes()
 
     def set_data_for(self, provid_clt_id=None, search=None):
         self.provid_clt_id = provid_clt_id
@@ -622,11 +648,34 @@ class RapportTableWidget(FTableWidget):
             msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
         else:
             self.provider_clt = "Tous"
+            activity = None
+            if hasattr(self.parent, "current_activity"):
+                activity = self.parent.current_activity()
+            else:
+                activity = Activity.get_current()
+            if activity is not None:
+                account_ids = [
+                    a.id
+                    for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                        ProviderOrClient.activity == activity
+                    )
+                ]
+                if account_ids:
+                    qs = qs.where(Payment.provider_clt.in_(account_ids))
+                else:
+                    qs = qs.where(Payment.id == -1)
             msg = self.provider_clt
         self.parent.label_owner.setText(msg)
 
         self.data = [
-            (pay.date, pay.libelle, pay.debit, pay.credit, pay.balance, pay.id)
+            (
+                format_movement_date(pay.date),
+                pay.libelle,
+                pay.debit,
+                pay.credit,
+                pay.balance,
+                pay.id,
+            )
             for pay in qs.iterator()
         ]
 
@@ -768,24 +817,42 @@ class RapportCISSTableWidget(FTableWidget):
         self.parent = parent
 
         self.sorter = False
-        self.stretch_columns = [0, 1, 2, 3, 4, 5]
+        self.stretch_columns = [1]
         self.align_map = {0: "l", 1: "l", 2: "r", 3: "r", 4: "r", 5: "r"}
         self.display_vheaders = False
         self.provider_clt = None
+        self._libelle_column = 1
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._popup_row)
 
-        # Libellé = colonne qui prend la largeur max
-        header = self.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
+        self._apply_column_resize_modes()
+
+    def _apply_column_resize_modes(self):
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
+        last_col = len(self.hheaders) - 1
+        libelle_col = getattr(self, "_libelle_column", 1)
+        for col in range(header.count() or len(self.hheaders)):
+            if col == last_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            elif col == libelle_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+            else:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+
+    def _format_for_table(self, value):
+        from decimal import Decimal
+        from datetime import date as date_cls
+
+        if isinstance(value, float):
+            return format_number_table_no_round(value)
+        if isinstance(value, Decimal):
+            return format_number_table_no_round(value)
+        if isinstance(value, (datetime, date_cls)):
+            return format_movement_date(value)
+        return super()._format_for_table(value)
 
     def _item_for_data(self, row, column, data, context=None):
         from decimal import Decimal
@@ -815,6 +882,7 @@ class RapportCISSTableWidget(FTableWidget):
             self.parent.display_balance(device_amount(self.balance_tt, provid_clt_id))
         )
         self.hideColumn(len(self.hheaders) - 1)
+        self._apply_column_resize_modes()
 
     def set_data_for(self, provid_clt_id=None, search=None):
         self.provid_clt_id = provid_clt_id
@@ -844,12 +912,28 @@ class RapportCISSTableWidget(FTableWidget):
             msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
         else:
             self.provider_clt = "Tous"
+            activity = None
+            if hasattr(self.parent, "current_activity"):
+                activity = self.parent.current_activity()
+            else:
+                activity = Activity.get_current()
+            if activity is not None:
+                account_ids = [
+                    a.id
+                    for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                        ProviderOrClient.activity == activity
+                    )
+                ]
+                if account_ids:
+                    qs = qs.where(Payment.provider_clt.in_(account_ids))
+                else:
+                    qs = qs.where(Payment.id == -1)
             msg = self.provider_clt
         self.parent.label_owner.setText(msg)
 
         self.data = [
             (
-                pay.date,
+                format_movement_date(pay.date),
                 pay.libelle,
                 pay.weight,
                 pay.debit,

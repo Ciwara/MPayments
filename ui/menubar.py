@@ -9,8 +9,6 @@ from Common.ui.common import FWidget
 from configuration import Config
 from PyQt6.QtGui import QIcon, QPixmap, QAction
 
-# from PyQt6.QtCore import SIGNAL
-
 
 class MenuBar(FMenuBar, FWidget):
     def __init__(self, parent=None, admin=False, *args, **kwargs):
@@ -61,6 +59,13 @@ class MenuBar(FMenuBar, FWidget):
             goto_.addAction(el_menu)
             goto_.addSeparator()
 
+        # Changement d'activité uniquement via le popup
+        activities_ = self.addMenu("&Activités")
+        switch_act = QAction("Changer d'activité…", self)
+        switch_act.setShortcut("Ctrl+Shift+A")
+        switch_act.triggered.connect(self.goto_switch_activity)
+        activities_.addAction(switch_act)
+
         # Menu Aide
         help_ = self.addMenu("Aide")
         help_.addAction(
@@ -73,11 +78,12 @@ class MenuBar(FMenuBar, FWidget):
     def goto(self, goto):
         self.change_main_context(goto)
 
-    # Aide
+    def goto_switch_activity(self):
+        if hasattr(self.parent, "switch_activity"):
+            self.parent.switch_activity()
+
     def goto_help(self):
         pass
-        # from ui.help import HTMLEditor
-        # self.open_dialog(HTMLEditor, modal=True)
 
     def goto_about(self):
         from ui.about import AboutDialog

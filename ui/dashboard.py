@@ -21,7 +21,7 @@ from PyQt6.QtGui import QFont, QPalette, QColor, QPixmap, QIcon, QLinearGradient
 from Common.ui.common import FWidget
 from configuration import Config
 from data_helper import device_amount
-from models import Payment, ProviderOrClient
+from models import Activity, Payment, ProviderOrClient
 from ui.debt_manager import safe_float, precise_calculation
 
 # Configuration du logger
@@ -356,21 +356,42 @@ class DataUpdateThread(QThread):
         }
         
         try:
-            # Statistiques de base
+            activity = Activity.get_current()
+            data['activity_name'] = activity.name if activity else ""
+
+            # Statistiques de base (scopées à l'activité courante)
             clients_query = ProviderOrClient.select().where(
                 ProviderOrClient.type_ == ProviderOrClient.CLT,
                 ProviderOrClient.deleted == False
             )
-            data['clients_count'] = clients_query.count()
-            
             providers_query = ProviderOrClient.select().where(
                 ProviderOrClient.type_ == ProviderOrClient.FSEUR,
                 ProviderOrClient.deleted == False
             )
+            if activity is not None:
+                clients_query = clients_query.where(ProviderOrClient.activity == activity)
+                providers_query = providers_query.where(ProviderOrClient.activity == activity)
+
+            data['clients_count'] = clients_query.count()
             data['providers_count'] = providers_query.count()
-            
+
             # Statistiques des paiements
+            account_ids = [
+                a.id
+                for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                    ProviderOrClient.activity == activity,
+                    ProviderOrClient.deleted == False,
+                )
+            ] if activity is not None else None
+
             payments_query = Payment.select().where(Payment.deleted == False)
+            if account_ids is not None:
+                if account_ids:
+                    payments_query = payments_query.where(
+                        Payment.provider_clt.in_(account_ids)
+                    )
+                else:
+                    payments_query = payments_query.where(Payment.id == -1)
             all_payments = list(payments_query.iterator())
             
             data['total_payments'] = len(all_payments)
@@ -548,7 +569,7 @@ class DashboardWidget(FWidget):
         # Section contrôles
         controls_layout = QHBoxLayout()
         controls_layout.setSpacing(12)
-        
+
         # Sélecteur de période avec style moderne
         period_combo = QComboBox()
         period_combo.addItems(["Aujourd'hui", "Cette semaine", "Ce mois", "6 derniers mois", "Cette année"])
@@ -671,7 +692,7 @@ class DashboardWidget(FWidget):
         
         main_layout.addWidget(scroll_area)
         self.setLayout(main_layout)
-    
+
     def refresh_data(self):
         """Lance la mise à jour des données"""
         logger.debug("Démarrage de la mise à jour des données")
