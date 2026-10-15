@@ -52,7 +52,7 @@ app = BUNDLE(
     name="Business.app",
     icon=icon_path,
     bundle_identifier="com.fgs.business",
-    version="2.1.1",
+    version="2.1.3",
     info_plist={
         "NSPrincipalClass": "NSApplication",
         "NSHighResolutionCapable": True,
