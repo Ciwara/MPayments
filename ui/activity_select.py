@@ -7,7 +7,7 @@ import logging
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -17,65 +17,111 @@ from PyQt6.QtWidgets import (
 )
 
 from Common.ui.common import Button, FWidget
+from configuration import Config
 from models import Activity
 from ui.activity_edit_add import EditOrAddActivityDialog
 
 logger = logging.getLogger(__name__)
 
 
-class SelectActivityDialog(QDialog, FWidget):
-    """Choix d'activité après login, ou changement pendant la session."""
+class SelectActivityWidget(FWidget):
+    """Page de choix d'activité (après login, ou changement pendant la session)."""
 
-    def __init__(self, parent=None, required=True, *args, **kwargs):
-        FWidget.__init__(self, parent, *args, **kwargs)
+    def __init__(self, parent=None, required=False, return_to=None, *args, **kwargs):
+        super().__init__(parent=parent, *args, **kwargs)
         self.parent = parent
         self.required = required
-        self.selected_activity = None
+        self.return_to = return_to
 
-        self.setWindowTitle("Choisir une activité")
-        self.setMinimumSize(440, 360)
-        self.setModal(True)
-        if required:
-            # Empêche la fermeture sans choix (croix / Échap)
-            self.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+        try:
+            self.parentWidget().setWindowTitle(f"{Config.APP_NAME} — Choisir une activité")
+        except Exception:
+            pass
 
-        vbox = QVBoxLayout()
-        vbox.setSpacing(14)
-        vbox.setContentsMargins(24, 24, 24, 24)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(32, 28, 32, 28)
+
+        card = QFrame()
+        card.setObjectName("activity_select_card")
+        card.setMaximumWidth(640)
+        card.setStyleSheet(
+            """
+            QFrame#activity_select_card {
+                background-color: palette(base);
+                border: 1px solid palette(mid);
+                border-radius: 12px;
+            }
+            """
+        )
+        card_box = QVBoxLayout(card)
+        card_box.setSpacing(14)
+        card_box.setContentsMargins(28, 28, 28, 24)
 
         title = QLabel("Quelle activité souhaitez-vous utiliser ?")
-        title.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
-        vbox.addWidget(title)
+        title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        title.setWordWrap(True)
+        card_box.addWidget(title)
 
         hint = QLabel(
             "Chaque activité a ses propres comptes et paiements. "
-            "Pour en changer plus tard : menu Activités → Changer d'activité…"
+            "Choisissez-en une pour continuer."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: palette(mid);")
-        vbox.addWidget(hint)
+        card_box.addWidget(hint)
 
         self.list_widget = QListWidget()
+        self.list_widget.setMinimumHeight(280)
+        self.list_widget.setWordWrap(True)
+        self.list_widget.setStyleSheet(
+            """
+            QListWidget {
+                border: 1px solid palette(mid);
+                border-radius: 8px;
+                padding: 4px;
+                font-size: 14px;
+            }
+            QListWidget::item {
+                padding: 10px 12px;
+                border-radius: 6px;
+            }
+            QListWidget::item:selected {
+                background-color: palette(highlight);
+                color: palette(highlighted-text);
+            }
+            """
+        )
         self.list_widget.itemDoubleClicked.connect(self._accept_selection)
-        vbox.addWidget(self.list_widget, 1)
+        card_box.addWidget(self.list_widget, 1)
 
         btn_row = QHBoxLayout()
         self.new_btt = Button("➕ Nouvelle activité")
         self.new_btt.clicked.connect(self._create_activity)
         btn_row.addWidget(self.new_btt)
+
+        self.edit_btt = Button("Modifier")
+        self.edit_btt.clicked.connect(self._edit_activity)
+        btn_row.addWidget(self.edit_btt)
         btn_row.addStretch()
 
         if not required:
-            cancel_btt = Button("Annuler")
-            cancel_btt.clicked.connect(self.reject)
-            btn_row.addWidget(cancel_btt)
+            back_btt = Button("Retour")
+            back_btt.clicked.connect(self._go_back)
+            btn_row.addWidget(back_btt)
 
         self.ok_btt = Button("Continuer")
         self.ok_btt.clicked.connect(self._accept_selection)
         btn_row.addWidget(self.ok_btt)
-        vbox.addLayout(btn_row)
+        card_box.addLayout(btn_row)
 
-        self.setLayout(vbox)
+        holder = QHBoxLayout()
+        holder.addStretch()
+        holder.addWidget(card, 1)
+        holder.addStretch()
+        root.addStretch()
+        root.addLayout(holder)
+        root.addStretch()
+
         self.refresh_list()
 
     def refresh_list(self):
@@ -92,7 +138,12 @@ class SelectActivityDialog(QDialog, FWidget):
             activities = list(Activity.active_query())
 
         for act in activities:
-            item = QListWidgetItem(act.name)
+            label = act.name
+            if current and act.id == current.id:
+                label = f"{act.name}   ·   courante"
+            if act.description:
+                label = f"{label}\n{act.description}"
+            item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, act.id)
             if act.description:
                 item.setToolTip(act.description)
@@ -103,50 +154,72 @@ class SelectActivityDialog(QDialog, FWidget):
         if self.list_widget.currentItem() is None and self.list_widget.count() > 0:
             self.list_widget.setCurrentRow(0)
 
-    def _create_activity(self):
-        def _after_save(activity):
-            self.refresh_list()
-            for i in range(self.list_widget.count()):
-                item = self.list_widget.item(i)
-                if item.data(Qt.ItemDataRole.UserRole) == activity.id:
-                    self.list_widget.setCurrentItem(item)
-                    break
+    def _select_saved(self, activity):
+        self.refresh_list()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == activity.id:
+                self.list_widget.setCurrentItem(item)
+                break
+        host = self.parentWidget()
+        if host is not None and hasattr(host, "sync_activity_ui"):
+            try:
+                current = Activity.get_current()
+            except Exception:
+                current = None
+            if current and current.id == activity.id:
+                host.sync_activity_ui()
 
+    def _open_editor(self, activity):
         dlg = EditOrAddActivityDialog(
             parent=self.parent or self,
-            activity=None,
-            on_saved=_after_save,
+            activity=activity,
+            on_saved=self._select_saved,
         )
         dlg.setModal(True)
         dlg.exec()
 
-    def _accept_selection(self, *_args):
+    def _create_activity(self):
+        self._open_editor(None)
+
+    def _edit_activity(self):
+        activity = self._selected_activity(
+            "Veuillez sélectionner l'activité à modifier."
+        )
+        if activity is None:
+            return
+        self._open_editor(activity)
+
+    def _selected_activity(self, empty_message="Veuillez sélectionner une activité pour continuer."):
         item = self.list_widget.currentItem()
         if item is None:
-            QMessageBox.warning(
-                self,
-                "Activité requise",
-                "Veuillez sélectionner une activité pour continuer.",
-            )
-            return
+            QMessageBox.warning(self, "Activité requise", empty_message)
+            return None
         try:
-            activity = Activity.get_by_id(item.data(Qt.ItemDataRole.UserRole))
+            return Activity.get_by_id(item.data(Qt.ItemDataRole.UserRole))
         except Activity.DoesNotExist:
             QMessageBox.warning(self, "Activité", "Activité introuvable.")
             self.refresh_list()
+            return None
+
+    def _accept_selection(self, *_args):
+        activity = self._selected_activity()
+        if activity is None:
+            return
+        try:
+            Activity.set_current(activity)
+        except Exception as exc:
+            logger.error("Impossible de sélectionner l'activité: %s", exc)
+            QMessageBox.warning(self, "Activité", "Impossible de sélectionner cette activité.")
             return
 
-        Activity.set_current(activity)
-        self.selected_activity = activity
-        self.accept()
+        host = self.parentWidget()
+        if host is not None and hasattr(host, "on_activity_selected"):
+            host.on_activity_selected(activity, return_to=self.return_to)
 
-    def reject(self):
+    def _go_back(self):
         if self.required:
             return
-        super().reject()
-
-    def closeEvent(self, event):
-        if self.required and self.selected_activity is None:
-            event.ignore()
-            return
-        super().closeEvent(event)
+        host = self.parentWidget()
+        if host is not None and hasattr(host, "leave_activity_page"):
+            host.leave_activity_page(return_to=self.return_to)

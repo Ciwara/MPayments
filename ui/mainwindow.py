@@ -61,46 +61,61 @@ class MainWindow(FMainWindow):
         QTimer.singleShot(0, self.prompt_activity_after_login)
 
     def prompt_activity_after_login(self):
-        """Force le choix d'une activité juste après le login (une fois par session)."""
+        """Affiche la page de choix d'activité juste après le login (une fois par session)."""
         if self._activity_chosen_this_session or self._prompting_activity:
             return
         self._prompting_activity = True
         try:
-            if self.select_activity(required=True):
-                self._activity_chosen_this_session = True
-                self.reload_current_view()
-                self.sync_activity_ui()
+            self.open_activity_page(required=True, return_to=DebtsViewWidget)
         finally:
             self._prompting_activity = False
 
-    def select_activity(self, required=True):
-        """
-        Affiche le dialogue de choix d'activité.
-        required=True : obligatoire (post-login) ; False : changement optionnel.
-        """
-        from PyQt6.QtWidgets import QDialog
-        from ui.activity_select import SelectActivityDialog
+    def open_activity_page(self, required=False, return_to=None):
+        """Ouvre la page de choix d'activité dans la zone centrale."""
+        from ui.activity_select import SelectActivityWidget
 
-        dlg = SelectActivityDialog(parent=self, required=required)
-        result = dlg.exec()
-        if result == QDialog.DialogCode.Accepted and dlg.selected_activity:
-            self._update_window_title_activity(dlg.selected_activity)
-            return True
-        return False
+        if return_to is None:
+            view = getattr(self, "view_widget", None)
+            if isinstance(view, SelectActivityWidget):
+                return_to = view.return_to or DebtsViewWidget
+                required = required or view.required
+            else:
+                return_to = type(view) if view is not None else DebtsViewWidget
+        self.change_context(
+            SelectActivityWidget, required=required, return_to=return_to
+        )
 
     def switch_activity(self):
         """Changer d'activité pendant la session (menu / raccourci)."""
-        if self.select_activity(required=False):
-            self._activity_chosen_this_session = True
-            self.reload_current_view()
-            self.sync_activity_ui()
-            try:
-                from models import Activity
+        self.open_activity_page(required=False)
 
-                act = Activity.get_current()
-                self.Notify(f"Activité « {act.name} » sélectionnée", "success")
-            except Exception:
-                pass
+    def on_activity_selected(self, activity, return_to=None):
+        """Activité choisie depuis la page : retour à l'écran précédent."""
+        self._activity_chosen_this_session = True
+        self._update_window_title_activity(activity)
+        self._show_view(return_to)
+        self.sync_activity_ui()
+        name = getattr(activity, "name", "") or ""
+        if name:
+            self.Notify(f"Activité « {name} » sélectionnée", "success")
+
+    def leave_activity_page(self, return_to=None):
+        """Quitte la page d'activité sans changer la sélection."""
+        self._show_view(return_to)
+
+    def _show_view(self, view_cls):
+        target = view_cls or DebtsViewWidget
+        try:
+            from ui.activity_select import SelectActivityWidget
+
+            if target is SelectActivityWidget:
+                target = DebtsViewWidget
+        except Exception:
+            pass
+        try:
+            self.change_context(target)
+        except Exception:
+            self.change_context(DebtsViewWidget)
 
     def reload_current_view(self):
         """Recharge la vue centrale pour appliquer le filtre d'activité."""

@@ -14,3 +14,5 @@ dist/
 .env/
 database.db-shm
 database.db-wal
+logs/app.log
+.common_device_node

@@ -114,21 +114,7 @@ class Activity(BaseModel):
         return activity
 
     @classmethod
-    def ensure_default(cls):
-        """Garantit au moins une activité courante (migration / première install)."""
-        try:
-            current = cls.get(cls.is_current == True, cls.deleted == False)
-            return current
-        except cls.DoesNotExist:
-            pass
-
-        try:
-            existing = cls.active_query().first()
-            if existing:
-                return cls.set_current(existing)
-        except Exception:
-            pass
-
+    def _default_org_owner(cls):
         org = None
         try:
             org = Organization.get_by_id(1)
@@ -146,16 +132,105 @@ class Activity(BaseModel):
                 owner = Owner.select().first()
             except Exception:
                 owner = None
+        return org, owner
 
-        activity = cls.create(
-            organization=org,
-            owner=owner,
-            name=cls.DEFAULT_NAME,
-            description="Activité par défaut",
-            is_current=True,
-            deleted=False,
-        )
-        return activity
+    @classmethod
+    def get_or_create_principale(cls):
+        """Retourne (ou crée) l'activité « Principale » pour les données héritées."""
+        try:
+            principale = cls.get(cls.name == cls.DEFAULT_NAME, cls.deleted == False)
+        except cls.DoesNotExist:
+            org, owner = cls._default_org_owner()
+            has_current = cls.select().where(
+                cls.is_current == True, cls.deleted == False
+            ).exists()
+            principale = cls.create(
+                organization=org,
+                owner=owner,
+                name=cls.DEFAULT_NAME,
+                description="Activité par défaut (données existantes)",
+                is_current=not has_current,
+                deleted=False,
+            )
+        if not cls.select().where(cls.is_current == True, cls.deleted == False).exists():
+            cls.set_current(principale)
+        return principale
+
+    @classmethod
+    def assign_legacy_accounts_to_principale(cls):
+        """
+        Rattache à « Principale » tous les comptes sans activité valide
+        (import / migration d'une ancienne base) et rend Principale courante.
+        """
+        from Common.models import dbh as _dbh
+
+        principale = cls.get_or_create_principale()
+        # Toujours afficher les données migrées sous Principale
+        cls.set_current(principale)
+
+        updated = 0
+        # SQL brut : plus fiable si un index activity_id est corrompu
+        if _dbh is not None:
+            if _dbh.is_closed():
+                _dbh.connect()
+            try:
+                # Réparer les index avant le backfill (sinon WHERE IS NULL peut renvoyer 0)
+                _dbh.execute_sql("REINDEX")
+            except Exception:
+                pass
+            try:
+                cursor = _dbh.execute_sql(
+                    'UPDATE "providerorclient" SET "activity_id" = ? '
+                    'WHERE "activity_id" IS NULL '
+                    '   OR "activity_id" = 0 '
+                    '   OR "activity_id" = \'\' '
+                    '   OR "activity_id" NOT IN (SELECT "id" FROM "activity")',
+                    (principale.id,),
+                )
+                updated = cursor.rowcount if cursor is not None else 0
+            except Exception:
+                # Fallback : rattacher tous les comptes à Principale
+                cursor = _dbh.execute_sql(
+                    'UPDATE "providerorclient" SET "activity_id" = ?',
+                    (principale.id,),
+                )
+                updated = cursor.rowcount if cursor is not None else 0
+        else:
+            updated = (
+                ProviderOrClient.update(activity=principale)
+                .where(
+                    ProviderOrClient.activity.is_null(True)
+                    | (ProviderOrClient.activity_id == 0)
+                )
+                .execute()
+            ) or 0
+
+        return principale, updated
+
+    @classmethod
+    def ensure_default(cls):
+        """Garantit au moins une activité courante (migration / première install)."""
+        try:
+            current = cls.get(cls.is_current == True, cls.deleted == False)
+            return current
+        except cls.DoesNotExist:
+            pass
+
+        # Préférer « Principale » si elle existe déjà
+        try:
+            principale = cls.get(cls.name == cls.DEFAULT_NAME, cls.deleted == False)
+            return cls.set_current(principale)
+        except cls.DoesNotExist:
+            pass
+
+        try:
+            existing = cls.active_query().first()
+            if existing:
+                return cls.set_current(existing)
+        except Exception:
+            pass
+
+        return cls.get_or_create_principale()
 
     @classmethod
     def name_exists(cls, name, exclude_id=None):

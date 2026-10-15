@@ -19,7 +19,7 @@ a = Analysis(
     pathex=[os.getcwd()],
     binaries=[],
     datas=datas,
-    hiddenimports=["PyQt5.QtCore", "PyQt5.QtGui", "PyQt5.QtWidgets"],
+    hiddenimports=["PyQt6.QtCore", "PyQt6.QtGui", "PyQt6.QtWidgets"],
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
@@ -34,7 +34,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="Payments",
+    name="Business",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -49,13 +49,15 @@ exe = EXE(
 
 app = BUNDLE(
     exe,
-    name="Payments.app",
+    name="Business.app",
     icon=icon_path,
-    bundle_identifier="com.fgs.payments",
-    version="1.0.0",
+    bundle_identifier="com.fgs.business",
+    version="2.1.1",
     info_plist={
         "NSPrincipalClass": "NSApplication",
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "10.13",
+        "CFBundleName": "Business",
+        "CFBundleDisplayName": "Business",
     },
 )

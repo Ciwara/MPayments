@@ -59,12 +59,16 @@ class MenuBar(FMenuBar, FWidget):
             goto_.addAction(el_menu)
             goto_.addSeparator()
 
-        # Changement d'activité uniquement via le popup
         activities_ = self.addMenu("&Activités")
-        switch_act = QAction("Changer d'activité…", self)
+        switch_act = QAction("Changer d'activité", self)
         switch_act.setShortcut("Ctrl+Shift+A")
         switch_act.triggered.connect(self.goto_switch_activity)
         activities_.addAction(switch_act)
+
+        import_act = QAction("Importer une sauvegarde dans une activité…", self)
+        import_act.setShortcut("Ctrl+Shift+I")
+        import_act.triggered.connect(self.goto_import_into_activity)
+        activities_.addAction(import_act)
 
         # Menu Aide
         help_ = self.addMenu("Aide")
@@ -81,6 +85,12 @@ class MenuBar(FMenuBar, FWidget):
     def goto_switch_activity(self):
         if hasattr(self.parent, "switch_activity"):
             self.parent.switch_activity()
+
+    def goto_import_into_activity(self):
+        from ui.activity_import_dialog import ImportIntoActivityDialog
+
+        dlg = ImportIntoActivityDialog(parent=self.parent)
+        dlg.exec()
 
     def goto_help(self):
         pass

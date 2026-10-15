@@ -25,7 +25,7 @@ class Setup(AdminDatabase):
         self.LIST_CREAT.append(Activity)
         self.LIST_CREAT.append(ProviderOrClient)
         self.LIST_CREAT.append(Payment)
-        self.MIG_VERSION = 22
+        self.MIG_VERSION = 23
         self.LIST_MIGRATE += [
             ("ProviderOrClient", "deleted", BooleanField(default=False)),
             ("ProviderOrClient", "is_syncro", BooleanField(default=False)),
@@ -62,7 +62,7 @@ class Setup(AdminDatabase):
                 return set()
 
     def _ensure_activity_schema(self):
-        """Crée Activity, ajoute activity_id aux comptes, backfill activité par défaut."""
+        """Crée Activity, ajoute activity_id, répare index, backfill → Principale."""
         if dbh is None:
             return
         if dbh.is_closed():
@@ -84,8 +84,44 @@ class Setup(AdminDatabase):
             except Exception as exc:
                 logger.warning(f"Ajout activity_id: {exc}")
 
+        self._repair_activity_indexes()
         self._relax_provider_name_unique()
         self._backfill_default_activity()
+        self._verify_principale_visibility()
+
+    def _repair_activity_indexes(self):
+        """
+        Répare les index activity_id corrompus.
+        Un index cassé fait échouer silencieusement WHERE activity_id IS NULL
+        (0 ligne) alors que les comptes ont bien activity_id NULL.
+        """
+        if dbh is None:
+            return
+        try:
+            integrity = dbh.execute_sql("PRAGMA integrity_check").fetchall()
+            bad = [r[0] for r in integrity if r and r[0] != "ok"]
+            if bad:
+                logger.warning("Intégrité SQLite dégradée: %s", "; ".join(bad[:5]))
+        except Exception as exc:
+            logger.warning("PRAGMA integrity_check: %s", exc)
+            bad = ["unknown"]
+
+        # Toujours recréer l'index FK activity_id (souvent source des erreurs)
+        try:
+            dbh.execute_sql('DROP INDEX IF EXISTS "providerorclient_activity_id"')
+            dbh.execute_sql(
+                'CREATE INDEX IF NOT EXISTS "providerorclient_activity_id" '
+                'ON "providerorclient" ("activity_id")'
+            )
+            logger.info("Index providerorclient_activity_id recréé")
+        except Exception as exc:
+            logger.warning(f"Recréation index activity_id: {exc}")
+
+        try:
+            dbh.execute_sql("REINDEX")
+            logger.info("REINDEX effectué")
+        except Exception as exc:
+            logger.warning(f"REINDEX: {exc}")
 
     def _relax_provider_name_unique(self):
         """Autorise le même nom de compte dans des activités différentes (SQLite)."""
@@ -122,24 +158,68 @@ class Setup(AdminDatabase):
             logger.warning(f"Index unique (name, activity_id): {exc}")
 
     def _backfill_default_activity(self):
+        """Anciennes données (import / migration) → activité « Principale » (courante)."""
         try:
-            activity = Activity.ensure_default()
-        except Exception as exc:
-            logger.error(f"ensure_default Activity: {exc}")
-            return
-
-        try:
-            (
-                ProviderOrClient.update(activity=activity)
-                .where(ProviderOrClient.activity.is_null(True))
-                .execute()
+            activity, updated = Activity.assign_legacy_accounts_to_principale()
+            logger.info(
+                "Activité « %s » (id=%s) courante — %s compte(s) rattaché(s)",
+                activity.name,
+                activity.id,
+                updated if updated is not None else "?",
             )
-        except Exception:
+        except Exception as exc:
+            logger.error(f"Backfill activité Principale: {exc}")
             try:
+                principale = Activity.get_or_create_principale()
+                Activity.set_current(principale)
+                dbh.execute_sql(
+                    'UPDATE "providerorclient" SET "activity_id" = ?',
+                    (principale.id,),
+                )
+                logger.info("Backfill forcé : tous les comptes → Principale id=%s", principale.id)
+            except Exception as exc2:
+                logger.warning(f"Backfill activity_id (SQL forcé): {exc2}")
+
+    def _verify_principale_visibility(self):
+        """Log de contrôle : comptes visibles sous Principale après migration."""
+        try:
+            principale = Activity.get_or_create_principale()
+            Activity.set_current(principale)
+            n_accounts = (
+                ProviderOrClient.select()
+                .where(
+                    ProviderOrClient.activity == principale,
+                    ProviderOrClient.deleted == False,
+                )
+                .count()
+            )
+            n_orphan = dbh.execute_sql(
+                'SELECT COUNT(*) FROM "providerorclient" '
+                'WHERE "activity_id" IS NULL OR "activity_id" NOT IN '
+                '(SELECT "id" FROM "activity")'
+            ).fetchone()[0]
+            if n_orphan:
+                logger.warning(
+                    "Encore %s compte(s) sans activité valide — rattachement forcé",
+                    n_orphan,
+                )
                 dbh.execute_sql(
                     'UPDATE "providerorclient" SET "activity_id" = ? '
-                    'WHERE "activity_id" IS NULL',
-                    (activity.id,),
+                    'WHERE "activity_id" IS NULL OR "activity_id" NOT IN '
+                    '(SELECT "id" FROM "activity")',
+                    (principale.id,),
                 )
-            except Exception as exc:
-                logger.warning(f"Backfill activity_id: {exc}")
+                n_accounts = (
+                    ProviderOrClient.select()
+                    .where(
+                        ProviderOrClient.activity == principale,
+                        ProviderOrClient.deleted == False,
+                    )
+                    .count()
+                )
+            logger.info(
+                "Visibilité Principale OK : %s compte(s) actif(s) rattaché(s)",
+                n_accounts,
+            )
+        except Exception as exc:
+            logger.warning(f"Vérification Principale: {exc}")

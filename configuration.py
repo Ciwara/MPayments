@@ -15,6 +15,25 @@ _BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = str(_BASE_DIR)
 
 
+def _installed_database_path():
+    """Chemin de database.db réellement ouvert par l'application.
+
+    Exe Windows (PyInstaller) : ``C:\\Business\\database.db`` à côté de Business.exe.
+    ``__file__`` pointe vers ``_internal`` et ne contient pas la base.
+    """
+    import sys
+
+    forced = (os.environ.get("COMMON_DB_PATH") or "").strip()
+    if forced:
+        forced_path = Path(forced)
+        if forced_path.is_dir():
+            forced_path = forced_path / "database.db"
+        return str(forced_path)
+    if getattr(sys, "frozen", False):
+        return str(Path(sys.executable).resolve().parent / "database.db")
+    return os.path.join(str(_BASE_DIR), "database.db")
+
+
 class Config(CConstants):
 
     """docstring for Config"""
@@ -54,8 +73,8 @@ class Config(CConstants):
 
     pdf_source = "pdf_source.pdf"
     APP_NAME = "Business"
-    APP_VERSION = "2.0.0" # Version de l'application
-    APP_DATE = "01/05/2026" # Date de la version de l'application
+    APP_VERSION = "2.1.2" # Version de l'application
+    APP_DATE = "15/10/2026" # Date de la version de l'application
     img_media = os.path.join(ROOT_DIR, "static", "images") + os.sep
     # Logo: si vous déposez de nouveaux fichiers (logo_v2.*), ils seront utilisés automatiquement.
     _logo_png_v2 = os.path.join(img_media, "logo_v2.png")
@@ -71,8 +90,8 @@ class Config(CConstants):
     IMG_MEDIA = os.path.join(MEDIA_DIR, "img")
     ICON_MEDIA = os.path.join(MEDIA_DIR, "icons")
     
-    # Configuration de la base de données
-    DB_PATH = os.path.join(BASE_DIR, "database.db")
+    # Configuration de la base de données (à côté de l'exe installé, pas dans _internal)
+    DB_PATH = _installed_database_path()
     
     # Configuration des logs
     LOG_DIR = os.path.join(BASE_DIR, "logs")

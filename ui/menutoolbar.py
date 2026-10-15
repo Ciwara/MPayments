@@ -63,7 +63,7 @@ class MenuToolBar(FMenuToolBar, FWidget):
             "color: palette(window-text); font-size: 11px; font-weight: 600; padding: 0 8px;"
         )
         self.activity_label.setToolTip(
-            "Activité courante — pour changer : menu Activités → Changer d'activité…"
+            "Activité courante — pour changer : menu Activités → Changer d'activité"
         )
         self.addWidget(self.activity_label)
 
