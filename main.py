@@ -24,6 +24,11 @@ import Common.cstatic as _cstatic  # noqa: E402
 _cstatic.LICENSE_REQUIRED = Config.LICENSE_REQUIRED
 _cstatic.BACKUP_TO_USB = Config.BACKUP_TO_USB
 _cstatic.APP_NAME = Config.APP_NAME
+_cstatic.APP_VERSION = Config.APP_VERSION
+_cstatic.APP_DATE = Config.APP_DATE
+_cstatic.CConstants.APP_NAME = Config.APP_NAME
+_cstatic.CConstants.APP_VERSION = Config.APP_VERSION
+_cstatic.CConstants.APP_DATE = Config.APP_DATE
 
 
 def _register_cleanable_models():

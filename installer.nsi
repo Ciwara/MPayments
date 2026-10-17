@@ -7,9 +7,10 @@
   !define MUI_PRODUCT "Business"
   ; Doit correspondre au nom du .exe produit par PyInstaller (Mpayment_wind.spec)
   !define MUI_FILE "Business"
-  !define MUI_VERSION "2.1.3"
+  !define MUI_VERSION "2.1.4"
   ; Libellé des raccourcis bureau / menu (nom visible pour l’utilisateur)
-  !define MUI_SHORTCUT_NAME "Business"
+  ; Le dossier d'installation reste C:\Business (MUI_PRODUCT), l'exe reste Business.exe.
+  !define MUI_SHORTCUT_NAME "Mpayment"
   ; Clé fixe (sans version) : même dossier / même entrée désinstall à chaque mise à jour
   !define MUI_PRODUCT_KEY "${MUI_PRODUCT}"
   !define MUI_BRANDINGTEXT "${MUI_SHORTCUT_NAME} ${MUI_VERSION}"
@@ -70,6 +71,11 @@ Section "install"
 ; Ne pas utiliser $INSTDIR\static\images\ : en onedir les datas sont sous _internal\.
   !define SHORTCUT_ICON_EXE "$INSTDIR\${MUI_FILE}.exe"
 
+; Ancien raccourci « Business » : retiré pour ne garder que Mpayment
+  Delete "$DESKTOP\Business.lnk"
+  Delete "$SMPROGRAMS\Business\*.*"
+  RmDir "$SMPROGRAMS\Business"
+
 ;create desktop shortcut (nom fixe, sans version)
   CreateShortCut "$DESKTOP\${MUI_SHORTCUT_NAME}.lnk" "$INSTDIR\${MUI_FILE}.exe" "" "${SHORTCUT_ICON_EXE}" 0
 
@@ -115,8 +121,11 @@ RMDir /r $INSTDIR\tcl
 
 ;Delete Start Menu Shortcuts
   Delete "$DESKTOP\${MUI_SHORTCUT_NAME}.lnk"
+  Delete "$DESKTOP\Business.lnk"
   Delete "$SMPROGRAMS\${MUI_SHORTCUT_NAME}\*.*"
   RmDir  "$SMPROGRAMS\${MUI_SHORTCUT_NAME}"
+  Delete "$SMPROGRAMS\Business\*.*"
+  RmDir  "$SMPROGRAMS\Business"
 
 ;Delete Uninstaller And Unistall Registry Entries
   DeleteRegKey HKEY_LOCAL_MACHINE "SOFTWARE\${MUI_PRODUCT_KEY}"

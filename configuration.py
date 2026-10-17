@@ -72,9 +72,9 @@ class Config(CConstants):
     NAME_MAIN = "main.py"
 
     pdf_source = "pdf_source.pdf"
-    APP_NAME = "Business"
-    APP_VERSION = "2.1.3" # Version de l'application
-    APP_DATE = "15/10/2026" # Date de la version de l'application
+    APP_NAME = "Mpayment"
+    APP_VERSION = "2.1.4" # Version de l'application
+    APP_DATE = "17/10/2026" # Date de la version de l'application
     img_media = os.path.join(ROOT_DIR, "static", "images") + os.sep
     # Logo: si vous déposez de nouveaux fichiers (logo_v2.*), ils seront utilisés automatiquement.
     _logo_png_v2 = os.path.join(img_media, "logo_v2.png")

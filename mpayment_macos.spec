@@ -57,7 +57,7 @@ app = BUNDLE(
         "NSPrincipalClass": "NSApplication",
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "10.13",
-        "CFBundleName": "Business",
-        "CFBundleDisplayName": "Business",
+        "CFBundleName": "Mpayment",
+        "CFBundleDisplayName": "Mpayment",
     },
 )
