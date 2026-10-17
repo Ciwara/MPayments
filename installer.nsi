@@ -7,7 +7,7 @@
   !define MUI_PRODUCT "Business"
   ; Doit correspondre au nom du .exe produit par PyInstaller (Mpayment_wind.spec)
   !define MUI_FILE "Business"
-  !define MUI_VERSION "2.1.4"
+  !define MUI_VERSION "2.1.5"
   ; Libellé des raccourcis bureau / menu (nom visible pour l’utilisateur)
   ; Le dossier d'installation reste C:\Business (MUI_PRODUCT), l'exe reste Business.exe.
   !define MUI_SHORTCUT_NAME "Mpayment"

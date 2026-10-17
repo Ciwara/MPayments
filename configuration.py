@@ -73,7 +73,7 @@ class Config(CConstants):
 
     pdf_source = "pdf_source.pdf"
     APP_NAME = "Mpayment"
-    APP_VERSION = "2.1.4" # Version de l'application
+    APP_VERSION = "2.1.5" # Version de l'application
     APP_DATE = "17/10/2026" # Date de la version de l'application
     img_media = os.path.join(ROOT_DIR, "static", "images") + os.sep
     # Logo: si vous déposez de nouveaux fichiers (logo_v2.*), ils seront utilisés automatiquement.
