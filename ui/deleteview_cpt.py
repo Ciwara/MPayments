@@ -3,44 +3,56 @@
 # maintainer: Fad
 from __future__ import unicode_literals, absolute_import, division, print_function
 
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QGridLayout, QDialog
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QDialog, QLabel
 
-from Common.ui.common import FWidget, FPageTitle, Button, FLabel
+from Common.ui.common import FWidget, Button
 
 
 class DeleteViewWidget(QDialog, FWidget):
+    """Confirmation avant mise en corbeille (soft-delete)."""
+
     def __init__(self, table_p, obj, parent, *args, **kwargs):
         QDialog.__init__(self, parent, *args, **kwargs)
 
-        self.setWindowTitle("Confirmation de le suppression")
-        self.title = FPageTitle("Voulez vous vraiment le supprimer?")
+        self.setWindowTitle("Mettre à la corbeille")
+        self.setMinimumWidth(400)
         self.obj = obj
         self.table_p = table_p
         self.parent = parent
-        # self.title.setAlignment(Qt.AlignHCenter)
-        title_hbox = QHBoxLayout()
-        title_hbox.addWidget(self.title)
-        report_hbox = QGridLayout()
 
-        report_hbox.addWidget(FLabel(obj.display_name()), 0, 0)
-        # delete and cancel hbox
-        Button_hbox = QHBoxLayout()
+        title = QLabel("Mettre cet élément à la corbeille ?")
+        title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
 
-        # Delete Button widget.
-        delete_but = Button("Supprimer")
-        Button_hbox.addWidget(delete_but)
+        detail = QLabel(obj.display_name())
+        detail.setWordWrap(True)
+        detail.setStyleSheet("color: palette(mid); padding: 8px 0;")
+
+        hint = QLabel(
+            "Vous pourrez le restaurer depuis le menu Poubelle. "
+            "La suppression définitive se fait uniquement depuis la corbeille."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: palette(mid); font-size: 12px;")
+
+        delete_but = Button("Mettre à la corbeille")
         delete_but.clicked.connect(self.delete)
-        # Cancel Button widget.
         cancel_but = Button("Annuler")
-        Button_hbox.addWidget(cancel_but)
         cancel_but.clicked.connect(self.cancel)
 
-        # Create the QVBoxLayout contenaire.
-        vbox = QVBoxLayout()
-        vbox.addLayout(title_hbox)
-        vbox.addLayout(report_hbox)
-        vbox.addLayout(Button_hbox)
-        self.setLayout(vbox)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        buttons.addWidget(cancel_but)
+        buttons.addWidget(delete_but)
+
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(20, 20, 20, 20)
+        vbox.setSpacing(12)
+        vbox.addWidget(title)
+        vbox.addWidget(detail)
+        vbox.addWidget(hint)
+        vbox.addLayout(buttons)
 
     def cancel(self):
         self.close()
@@ -50,4 +62,5 @@ class DeleteViewWidget(QDialog, FWidget):
         self.obj.delete_data()
         self.cancel()
         self.table_p.refresh_()
-        self.parent.Notify("le rapport à été bien supprimé", "error")
+        if hasattr(self.parent, "Notify"):
+            self.parent.Notify("Élément mis à la corbeille", "success")

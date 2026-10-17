@@ -5,14 +5,7 @@
 import logging
 from datetime import datetime
 
-from Common.ui.common import (
-    BttExportPDF,
-    BttExportXLSX,
-    Button,
-    FormLabel,
-    FWidget,
-    LineEdit,
-)
+from Common.ui.common import Button, FormLabel, FWidget, LineEdit
 from Common.ui.table import FTableWidget, TotalsWidget
 from Common.ui.util import format_number_table_no_round, is_float
 from configuration import Config
@@ -20,228 +13,330 @@ from data_helper import device_amount
 from models import Activity, Payment, ProviderOrClient
 from ui.debt_manager import format_movement_date
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QKeySequence, QPixmap, QShortcut
 from PyQt6.QtWidgets import (
-    QGridLayout,
+    QAbstractItemView,
+    QComboBox,
+    QFrame,
     QHBoxLayout,
-    QVBoxLayout,
+    QHeaderView,
+    QLabel,
     QListWidget,
     QListWidgetItem,
     QMenu,
-    QSplitter,
-    QComboBox,
-    QLabel,
     QMessageBox,
-    QFrame,
-    QAbstractItemView,
-    QHeaderView,
+    QSplitter,
+    QVBoxLayout,
 )
-from ui.payment_edit_add import EditOrAddPaymentrDialog
-from ui.provider_client_edit_add import EditOrAddClientOrProviderDialog
 
-# Configuration du logger
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger(__name__)
-
-# Palette de couleurs moderne (cohérente avec les autres fichiers)
-COLORS = {
-    'primary': '#1976D2',
-    'primary_light': '#42A5F5',
-    'primary_dark': '#0D47A1',
-    'secondary': '#FF5722',
-    'secondary_light': '#FF8A65',
-    'success': '#4CAF50',
-    'success_light': '#81C784',
-    'warning': '#FF9800',
-    'warning_light': '#FFB74D',
-    'error': '#F44336',
-    'error_light': '#E57373',
-    'info': '#2196F3',
-    'info_light': '#64B5F6',
-    'background': '#F8F9FA',
-    'surface': '#FFFFFF',
-    'surface_variant': '#F5F5F5',
-    'text_primary': '#212121',
-    'text_secondary': '#757575',
-    'border': '#E0E0E0',
-    'shadow': 'rgba(0, 0, 0, 0.1)'
-}
 
 ALL_CONTACTS = "TOUS"
 
+# Filtres de contenu poubelle
+MODE_ALL = "Tout"
+MODE_ACCOUNTS = "Comptes supprimés"
+MODE_OPS = "Opérations seules"
+
 
 class DebtsTrashViewWidget(FWidget):
-
-    """Affiche la page de gestion de la corbeille avec design moderne"""
+    """Corbeille : comptes et/ou opérations soft-deleted de l'activité courante."""
 
     def __init__(self, parent=0, *args, **kwargs):
-        logger.debug("Initialisation de DebtsTrashViewWidget avec design moderne")
         super(DebtsTrashViewWidget, self).__init__(parent=parent, *args, **kwargs)
         self.parent = parent
-        self.parentWidget().setWindowTitle(
-            Config.APP_NAME + " 🗑️ Gestion des éléments supprimés"
-        )
-        logger.debug("Titre de la fenêtre défini avec style moderne")
-
-        # Style moderne pour le widget principal
-
-        self.title = "🗑️ Mouvements supprimés"
+        self.parentWidget().setWindowTitle(f"{Config.APP_NAME} — Corbeille")
         self.now = datetime.now().strftime(Config.DATEFORMAT)
-        logger.debug(f"Date actuelle: {self.now}")
-        # Affichage du solde masqué par défaut (toggle Afficher/Masquer)
         self._show_balance_amounts = False
 
-        # Labels modernes avec style amélioré
-        self.label_balance = FormLabel("")
-        
-        self.label_owner = FormLabel("")
-
         if Config.CISS:
-            logger.debug("Configuration CISS activée")
             self.table = RapportCISSTableWidget(parent=self)
         else:
-            logger.debug("Configuration CISS désactivée")
             self.table = RapportTableWidget(parent=self)
 
-        # Filtre par type (Clients / Fournisseurs / Tous)
+        # —— En-tête ——
+        header = QFrame()
+        header.setObjectName("trashHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(4, 0, 4, 8)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        self.title_label = QLabel("Corbeille")
+        self.title_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.subtitle_label = QLabel("")
+        self.subtitle_label.setStyleSheet("color: palette(mid); font-size: 12px;")
+        title_col.addWidget(self.title_label)
+        title_col.addWidget(self.subtitle_label)
+        header_layout.addLayout(title_col, 1)
+
+        self.stats_accounts = self._badge("0 compte")
+        self.stats_ops = self._badge("0 opération")
+        header_layout.addWidget(self.stats_accounts)
+        header_layout.addWidget(self.stats_ops)
+
+        # —— Panneau gauche ——
+        left_panel = QFrame()
+        left_panel.setObjectName("trashLeft")
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setSpacing(8)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+
+        left_title = QLabel("Éléments")
+        left_title.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
+        left_layout.addWidget(left_title)
+
+        self.mode_filter_combo = QComboBox()
+        self.mode_filter_combo.addItems([MODE_ALL, MODE_ACCOUNTS, MODE_OPS])
+        self.mode_filter_combo.currentTextChanged.connect(self._on_filters_changed)
+        left_layout.addWidget(self._field_label("Type d'élément"))
+        left_layout.addWidget(self.mode_filter_combo)
+
         self.type_filter_combo = QComboBox()
         self.type_filter_combo.addItems(["Clients", "Fournisseurs", "Tous"])
-        self.type_filter_combo.currentTextChanged.connect(self._on_type_filter_changed)
+        self.type_filter_combo.currentTextChanged.connect(self._on_filters_changed)
+        left_layout.addWidget(self._field_label("Type de compte"))
+        left_layout.addWidget(self.type_filter_combo)
 
-        # Champ de recherche
         self.search_field = LineEdit()
-        self.search_field.setPlaceholderText("Rechercher par nom...")
+        self.search_field.setPlaceholderText("Rechercher un compte…")
         self.search_field.textChanged.connect(self.search)
+        left_layout.addWidget(self.search_field)
 
-        self.search_count_label = QLabel("0 compte(s) en corbeille")
-        self.search_count_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
+        self.search_count_label = QLabel("0 élément(s)")
+        self.search_count_label.setStyleSheet("color: palette(mid); font-size: 11px;")
+        left_layout.addWidget(self.search_count_label)
 
-        # Boutons d'action
-        self.button = Button("🔄 Actualiser")
-        self.button.clicked.connect(self.refresh_period)
+        self.empty_hint = QLabel(
+            "La corbeille est vide pour cette activité.\n"
+            "Les comptes et opérations supprimés apparaîtront ici."
+        )
+        self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_hint.setWordWrap(True)
+        self.empty_hint.setStyleSheet(
+            "color: palette(mid); padding: 24px; font-size: 12px;"
+        )
 
-        self.add_btt = Button("🗑️ Supprimer définitivement")
-        self.add_btt.setEnabled(False)
-        self.add_btt.clicked.connect(self._confirm_suppression)
-        self.add_btt.setMaximumHeight(90)
-
-        self.sub_btt = Button("♻️ Restaurer")
-        self.sub_btt.setEnabled(False)
-        self.sub_btt.clicked.connect(self.restoration)
-        self.sub_btt.setMaximumHeight(90)
-
-        editbox = QGridLayout()
-        editbox.addWidget(self.label_owner, 0, 0)
-        editbox.setColumnStretch(0, 2)
-        editbox.addWidget(self.sub_btt, 0, 3)
-        editbox.addWidget(self.add_btt, 0, 4)
-        editbox.setSpacing(12)
-        editbox.setContentsMargins(16, 8, 16, 8)
+        # Actions créées avant la liste (refresh_ de la liste met à jour empty_btt)
+        self.label_owner = FormLabel("")
+        self.label_owner.setWordWrap(True)
+        self.refresh_btt = Button("Actualiser")
+        self.refresh_btt.clicked.connect(self.refresh_period)
+        self.restore_btt = Button("Restaurer")
+        self.restore_btt.setEnabled(False)
+        self.restore_btt.setToolTip(
+            "Restaurer le compte ou les opérations sélectionnés (Ctrl+R)"
+        )
+        self.restore_btt.clicked.connect(self.restoration)
+        self.purge_btt = Button("Supprimer définitivement")
+        self.purge_btt.setEnabled(False)
+        self.purge_btt.setToolTip("Suppression irréversible (Suppr)")
+        self.purge_btt.clicked.connect(self._confirm_suppression)
+        self.empty_btt = Button("Vider la corbeille")
+        self.empty_btt.setToolTip(
+            "Supprimer définitivement tout le contenu de la corbeille (activité courante)"
+        )
+        self.empty_btt.clicked.connect(self._confirm_empty_trash)
 
         self.table_provid_clt = ProviderOrClientTableWidget(parent=self)
+        left_layout.addWidget(self.table_provid_clt, 1)
+        left_layout.addWidget(self.empty_hint)
 
-        # Panneau gauche : filtre, recherche, liste
-        left_panel = QFrame()
-        left_panel.setObjectName("trash_panel")
-        left_layout = QVBoxLayout()
-        left_layout.setSpacing(10)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        title_left = QLabel("🗑️ Comptes en corbeille")
-        title_left.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        title_left.setStyleSheet("color: palette(window-text);")
-        left_layout.addWidget(title_left)
-        type_label = QLabel("Afficher :")
-        type_label.setStyleSheet("color: palette(window-text); font-size: 11px;")
-        left_layout.addWidget(type_label)
-        left_layout.addWidget(self.type_filter_combo)
-        left_layout.addWidget(self.search_field)
-        left_layout.addWidget(self.search_count_label)
-        left_layout.addWidget(self.table_provid_clt)
-        left_panel.setLayout(left_layout)
+        # —— Barre d'actions ——
+        actions = QFrame()
+        actions.setObjectName("trashActions")
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(8)
+        actions_layout.addWidget(self.label_owner, 1)
+        for b in (self.refresh_btt, self.restore_btt, self.purge_btt, self.empty_btt):
+            actions_layout.addWidget(b)
 
-        self.splt_add = QSplitter(Qt.Orientation.Horizontal)
-        self.splt_add.setLayout(editbox)
-
-        self.splitter_left = QSplitter(Qt.Orientation.Vertical)
-        self.splitter_left.addWidget(left_panel)
-
-        self.splt_clt = QSplitter(Qt.Orientation.Vertical)
-        self.splt_clt.addWidget(self.splt_add)
-        self.splt_clt.addWidget(self.table)
-        # Pied de page solde + toggle
-        self.toggle_balance_btt = Button("Afficher")
+        # —— Pied solde ——
+        self.toggle_balance_btt = Button("Afficher le solde")
         self.toggle_balance_btt.clicked.connect(self.toggle_balance_visibility)
+        self.label_balance = FormLabel("")
         balance_footer = QFrame()
-        balance_footer_layout = QHBoxLayout()
-        balance_footer_layout.setContentsMargins(0, 0, 0, 0)
-        balance_footer_layout.addWidget(self.toggle_balance_btt)
-        balance_footer_layout.addWidget(self.label_balance, 1)
-        balance_footer.setLayout(balance_footer_layout)
-        self.splt_clt.addWidget(balance_footer)
-        logger.debug("Splitters configurés")
+        balance_row = QHBoxLayout(balance_footer)
+        balance_row.setContentsMargins(0, 4, 0, 0)
+        balance_row.addWidget(self.toggle_balance_btt)
+        balance_row.addWidget(self.label_balance, 1)
+
+        # —— Zone droite ——
+        right = QFrame()
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
+        right_title = QLabel("Opérations en corbeille")
+        right_title.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
+        right_layout.addWidget(right_title)
+        right_layout.addWidget(actions)
+        right_layout.addWidget(self.table, 1)
+        right_layout.addWidget(balance_footer)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.splitter_left)
-        splitter.addWidget(self.splt_clt)
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([300, 700])
 
-        # Proportions par défaut pour une meilleure répartition
-        splitter.setSizes([250, 750])
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(10)
+        root.addWidget(header)
+        root.addWidget(splitter, 1)
 
-        hbox = QHBoxLayout(self)
-        hbox.setContentsMargins(16, 16, 16, 16)
-        hbox.addWidget(splitter)
-        self.setLayout(hbox)
+        # Raccourcis
+        QShortcut(QKeySequence("Ctrl+R"), self, self.restoration)
+        QShortcut(QKeySequence(Qt.Key.Key_Delete), self, self._confirm_suppression)
+        QShortcut(QKeySequence("F5"), self, self.refresh_period)
 
-        self.update_accounts_count()
-        # Afficher d’emblée toutes les opérations en corbeille (sans sélection de compte).
+        # Alias pour compatibilité code existant
+        self.sub_btt = self.restore_btt
+        self.add_btt = self.purge_btt
+        self.button = self.refresh_btt
+
+        self.refresh_header_stats()
         self.table.refresh_(provid_clt_id=None)
-        logger.debug("Mise en page Poubelle configurée")
+        self._update_empty_state()
+
+    # —— UI helpers ——
+
+    @staticmethod
+    def _badge(text):
+        lab = QLabel(text)
+        lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lab.setStyleSheet(
+            """
+            QLabel {
+                background: palette(midlight);
+                color: palette(window-text);
+                border-radius: 10px;
+                padding: 4px 12px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            """
+        )
+        return lab
+
+    @staticmethod
+    def _field_label(text):
+        lab = QLabel(text)
+        lab.setStyleSheet("color: palette(mid); font-size: 11px;")
+        return lab
+
+    def current_activity(self):
+        return Activity.get_current()
+
+    def trash_stats(self):
+        """Comptes / opérations soft-deleted pour l'activité courante."""
+        activity = self.current_activity()
+        qs_acc = ProviderOrClient.select().where(ProviderOrClient.deleted == True)
+        if activity is not None:
+            qs_acc = qs_acc.where(ProviderOrClient.activity == activity)
+        n_accounts = qs_acc.count()
+
+        qs_pay = Payment.select().where(Payment.deleted == True)
+        if activity is not None:
+            account_ids = [
+                a.id
+                for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                    ProviderOrClient.activity == activity
+                )
+            ]
+            if account_ids:
+                qs_pay = qs_pay.where(Payment.provider_clt.in_(account_ids))
+            else:
+                qs_pay = qs_pay.where(Payment.id == -1)
+        n_ops = qs_pay.count()
+        return n_accounts, n_ops
+
+    def refresh_header_stats(self):
+        activity = self.current_activity()
+        name = getattr(activity, "name", None) or "—"
+        if hasattr(self, "subtitle_label"):
+            self.subtitle_label.setText(f"Activité « {name} » · éléments soft-deleted")
+        n_acc, n_ops = self.trash_stats()
+        if hasattr(self, "stats_accounts"):
+            self.stats_accounts.setText(
+                f"{n_acc} compte{'s' if n_acc != 1 else ''}"
+            )
+        if hasattr(self, "stats_ops"):
+            self.stats_ops.setText(
+                f"{n_ops} opération{'s' if n_ops != 1 else ''}"
+            )
+        if hasattr(self, "empty_btt"):
+            self.empty_btt.setEnabled(n_acc > 0 or n_ops > 0)
+        self._update_empty_state()
+
+    def _update_empty_state(self):
+        if not hasattr(self, "table_provid_clt"):
+            return
+        n = max(0, self.table_provid_clt.count() - 1)
+        empty = n == 0
+        if hasattr(self, "empty_hint"):
+            self.empty_hint.setVisible(empty)
+        if hasattr(self, "search_count_label"):
+            self.search_count_label.setText(
+                f"{n} élément{'s' if n != 1 else ''} listé{'s' if n != 1 else ''}"
+            )
+
+    def set_selection_banner(self, html_or_text):
+        self.label_owner.setText(html_or_text)
+
+    def set_action_buttons_enabled(self, enabled):
+        self.restore_btt.setEnabled(bool(enabled))
+        self.purge_btt.setEnabled(bool(enabled))
+
+    # —— Actions ——
 
     def toggle_balance_visibility(self):
         self._show_balance_amounts = not self._show_balance_amounts
-        self.toggle_balance_btt.setText("Masquer" if self._show_balance_amounts else "Afficher")
+        self.toggle_balance_btt.setText(
+            "Masquer le solde" if self._show_balance_amounts else "Afficher le solde"
+        )
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         self.table.refresh_(provid_clt_id=provid_clt_id)
 
     def format_balance_text(self, amount_text: str) -> str:
         return amount_text if self._show_balance_amounts else "••••"
 
-    def current_activity(self):
-        """Activité courante (choisie uniquement via le popup)."""
-        return Activity.get_current()
-
     def refresh_period(self):
-        logger.debug("Rafraîchissement de la période")
-        self.table.refresh_()
-        self.update_accounts_count()
+        self.table_provid_clt.refresh_(
+            provid_clt=self.search_field.text().strip() or None
+        )
+        pid = getattr(self.table_provid_clt, "provid_clt_id", None)
+        self.table.refresh_(provid_clt_id=pid if isinstance(pid, int) else None)
+        self.refresh_header_stats()
 
-    def _on_type_filter_changed(self, _text):
-        self.table_provid_clt.refresh_(provid_clt=self.search_field.text().strip() or None)
-        self.update_accounts_count()
+    def _on_filters_changed(self, _text=None):
+        self.table_provid_clt.refresh_(
+            provid_clt=self.search_field.text().strip() or None
+        )
+        self.refresh_header_stats()
 
     def update_accounts_count(self):
-        table = getattr(self, "table_provid_clt", None)
-        label = getattr(self, "search_count_label", None)
-        if table is None or label is None:
-            return
-        n = max(0, table.count() - 1)
-        label.setText(f"{n} compte(s) en corbeille")
+        self.refresh_header_stats()
 
     def search(self):
-        search_text = self.search_field.text()
-        self.table_provid_clt.refresh_(provid_clt=search_text.strip() or None)
-        self.update_accounts_count()
+        self.table_provid_clt.refresh_(
+            provid_clt=self.search_field.text().strip() or None
+        )
+        self._update_empty_state()
 
-    def _confirm_suppression(self):
-        """Demande confirmation avant suppression définitive."""
+    def _selected_item(self):
         item = self.table_provid_clt.currentItem()
         if not isinstance(item, ProviderOrClientQListWidgetItem):
-            return
+            return None
         if isinstance(item.provid_clt, str):
+            return None
+        return item
+
+    def _confirm_suppression(self):
+        item = self._selected_item()
+        if item is None:
             return
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         if not isinstance(provid_clt_id, int):
@@ -260,17 +355,18 @@ class DebtsTrashViewWidget(FWidget):
                 )
                 msg = (
                     f"Supprimer définitivement les {n} opération(s) en corbeille "
-                    f"pour le compte « {account.name} » ?\n\n"
+                    f"du compte « {account.name} » ?\n\n"
                     "Cette action est irréversible."
                 )
             else:
                 msg = (
-                    f"Supprimer définitivement le compte « {account.name} » ?\n\n"
-                    "Cette action est irréversible (compte et paiements associés)."
+                    f"Supprimer définitivement le compte « {account.name} » "
+                    f"et toutes ses opérations ?\n\n"
+                    "Cette action est irréversible."
                 )
             reply = QMessageBox.question(
                 self,
-                "⚠️ Suppression définitive",
+                "Suppression définitive",
                 msg,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
@@ -278,20 +374,17 @@ class DebtsTrashViewWidget(FWidget):
             if reply == QMessageBox.StandardButton.Yes:
                 self.suppression()
         except Exception as e:
-            logger.error(f"Erreur: {e}")
-            self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
+            logger.exception("confirm purge")
+            self.parent.Notify(str(e), "error")
 
     def suppression(self):
-        item = self.table_provid_clt.currentItem()
-        if not isinstance(item, ProviderOrClientQListWidgetItem):
+        item = self._selected_item()
+        if item is None:
             return
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         if not isinstance(provid_clt_id, int):
             return
         mode = getattr(item, "list_entry_mode", "account_trash")
-        logger.debug(
-            "Suppression définitive compte ID: %s mode=%s", provid_clt_id, mode
-        )
         try:
             account = ProviderOrClient.get(id=provid_clt_id)
             if mode == "ops_trash":
@@ -305,32 +398,30 @@ class DebtsTrashViewWidget(FWidget):
                 ):
                     p.deletes_data()
                 self.parent.Notify(
-                    "✅ Opérations en corbeille supprimées définitivement", "success"
+                    f"Opérations en corbeille de « {account.name} » supprimées",
+                    "success",
                 )
             else:
+                name = account.name
                 account.delete_permanate()
-                self.parent.Notify("✅ Compte supprimé définitivement", "success")
-            self.table_provid_clt.refresh_(
-                provid_clt=self.search_field.text().strip() or None
-            )
-            self.update_accounts_count()
-            self.table.refresh_(provid_clt_id=provid_clt_id)
+                self.parent.Notify(f"Compte « {name} » supprimé définitivement", "success")
+            self._after_mutate()
         except Exception as e:
-            logger.error(f"Erreur lors de la suppression définitive: {str(e)}")
-            self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
+            logger.exception("purge")
+            self.parent.Notify(str(e), "error")
 
     def restoration(self):
-        item = self.table_provid_clt.currentItem()
-        if not isinstance(item, ProviderOrClientQListWidgetItem):
+        item = self._selected_item()
+        if item is None:
             return
         provid_clt_id = getattr(self.table_provid_clt, "provid_clt_id", None)
         if not isinstance(provid_clt_id, int):
             return
         mode = getattr(item, "list_entry_mode", "account_trash")
-        logger.debug("Restauration compte ID: %s mode=%s", provid_clt_id, mode)
         try:
             account = ProviderOrClient.get(id=provid_clt_id)
             if mode == "ops_trash":
+                n = 0
                 for p in (
                     Payment.select()
                     .where(
@@ -340,62 +431,139 @@ class DebtsTrashViewWidget(FWidget):
                     .order_by(Payment.date.asc(), Payment.id.asc())
                 ):
                     p.restore_from_trash()
+                    n += 1
                 self.parent.Notify(
-                    f"♻️ Opérations restaurées pour « {account.name} »", "success"
+                    f"{n} opération(s) restaurée(s) pour « {account.name} »",
+                    "success",
                 )
             else:
                 account.restore_data()
-                self.parent.Notify(f"♻️ Compte « {account.name} » restauré", "success")
-            self.table_provid_clt.refresh_(
-                provid_clt=self.search_field.text().strip() or None
-            )
-            self.update_accounts_count()
-            self.table.refresh_(provid_clt_id=provid_clt_id)
+                self.parent.Notify(f"Compte « {account.name} » restauré", "success")
+            self._after_mutate()
         except Exception as e:
-            logger.error(f"Erreur lors de la restauration: {str(e)}")
-            self.parent.Notify(f"❌ Erreur : {str(e)}", "error")
+            logger.exception("restore")
+            self.parent.Notify(str(e), "error")
+
+    def _confirm_empty_trash(self):
+        n_acc, n_ops = self.trash_stats()
+        if n_acc == 0 and n_ops == 0:
+            self.parent.Notify("La corbeille est déjà vide", "info")
+            return
+        activity = self.current_activity()
+        act_name = getattr(activity, "name", "") or "courante"
+        reply = QMessageBox.warning(
+            self,
+            "Vider la corbeille",
+            f"Vider entièrement la corbeille de l'activité « {act_name} » ?\n\n"
+            f"• {n_acc} compte(s) supprimé(s)\n"
+            f"• {n_ops} opération(s) en corbeille\n\n"
+            "Tout sera effacé définitivement. Cette action est irréversible.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._empty_trash()
+
+    def _empty_trash(self):
+        activity = self.current_activity()
+        try:
+            # 1) Opérations soft-deleted (tous comptes de l'activité)
+            qs_pay = Payment.select().where(Payment.deleted == True)
+            if activity is not None:
+                account_ids = [
+                    a.id
+                    for a in ProviderOrClient.select(ProviderOrClient.id).where(
+                        ProviderOrClient.activity == activity
+                    )
+                ]
+                if account_ids:
+                    qs_pay = qs_pay.where(Payment.provider_clt.in_(account_ids))
+                else:
+                    qs_pay = qs_pay.where(Payment.id == -1)
+            for p in qs_pay:
+                p.deletes_data()
+
+            # 2) Comptes soft-deleted
+            qs_acc = ProviderOrClient.select().where(ProviderOrClient.deleted == True)
+            if activity is not None:
+                qs_acc = qs_acc.where(ProviderOrClient.activity == activity)
+            for account in qs_acc:
+                account.delete_permanate()
+
+            self.parent.Notify("Corbeille vidée", "success")
+            self._after_mutate()
+        except Exception as e:
+            logger.exception("empty trash")
+            self.parent.Notify(str(e), "error")
+
+    def _after_mutate(self):
+        self.table_provid_clt.refresh_(
+            provid_clt=self.search_field.text().strip() or None
+        )
+        self.table_provid_clt.provid_clt_id = None
+        self.set_action_buttons_enabled(False)
+        self.table.refresh_(provid_clt_id=None)
+        self.refresh_header_stats()
 
     def display_balance(self, amount_text):
-        logger.debug(f"Affichage du solde avec style moderne: {amount_text}")
         amount_text = self.format_balance_text(amount_text)
-        return f"""
-            <div style="text-align: center; padding: 16px;">
-                <h2 style="color: {COLORS['primary']}; margin: 0; font-weight: 700;">
-                    💰 Solde du {self.now}
-                </h2>
-                <h1 style="color: {COLORS['success']}; margin: 8px 0; font-weight: 800; font-size: 24px;">
-                    {amount_text}
-                </h1>
-            </div>
-        """
+        return (
+            f"<div style='padding: 4px 0;'>"
+            f"<span style='color: palette(mid); font-size: 12px;'>Solde du {self.now}</span>"
+            f"<div style='font-size: 18px; font-weight: 700; margin-top: 2px;'>{amount_text}</div>"
+            f"</div>"
+        )
 
 
 class ProviderOrClientTableWidget(QListWidget):
-
-    """Affiche la liste des comptes (clients/fournisseurs) en corbeille."""
+    """Liste des éléments en corbeille (comptes et/ou opérations)."""
 
     def __init__(self, parent, *args, **kwargs):
         super(ProviderOrClientTableWidget, self).__init__(parent)
         self.parent = parent
+        self.provid_clt_id = None
         self.setAutoScroll(True)
+        self.setSpacing(2)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._context_menu)
         self.itemSelectionChanged.connect(self.handleClicked)
         self.itemDoubleClicked.connect(self._on_double_click)
         self.refresh_()
 
     def _on_double_click(self, item):
-        """Double-clic : restaurer le compte."""
-        if not isinstance(item, ProviderOrClientQListWidgetItem) or isinstance(item.provid_clt, str):
+        if not isinstance(item, ProviderOrClientQListWidgetItem) or isinstance(
+            item.provid_clt, str
+        ):
             return
         self.parent.restoration()
 
+    def _context_menu(self, pos):
+        item = self.itemAt(pos)
+        if not isinstance(item, ProviderOrClientQListWidgetItem):
+            return
+        if isinstance(item.provid_clt, str):
+            return
+        self.setCurrentItem(item)
+        menu = QMenu(self)
+        act_restore = menu.addAction("Restaurer")
+        act_purge = menu.addAction("Supprimer définitivement…")
+        chosen = menu.exec(self.mapToGlobal(pos))
+        if chosen == act_restore:
+            self.parent.restoration()
+        elif chosen == act_purge:
+            self.parent._confirm_suppression()
+
     def refresh_(self, provid_clt=None):
-        """Rafraîchir la liste des comptes en corbeille (deleted=True)."""
         self.clear()
         self.addItem(ProviderOrClientQListWidgetItem(ALL_CONTACTS))
 
         type_filter = "Clients"
         if hasattr(self.parent, "type_filter_combo"):
             type_filter = self.parent.type_filter_combo.currentText()
+        mode_filter = MODE_ALL
+        if hasattr(self.parent, "mode_filter_combo"):
+            mode_filter = self.parent.mode_filter_combo.currentText()
 
         def _apply_type(q):
             if type_filter == "Clients":
@@ -404,69 +572,68 @@ class ProviderOrClientTableWidget(QListWidget):
                 return q.where(ProviderOrClient.type_ == ProviderOrClient.FSEUR)
             return q
 
-        activity = None
-        if hasattr(self.parent, "current_activity"):
-            activity = self.parent.current_activity()
-        else:
-            activity = Activity.get_current()
-
-        qs_deleted = _apply_type(
-            ProviderOrClient.select().where(ProviderOrClient.deleted == True)
+        activity = (
+            self.parent.current_activity()
+            if hasattr(self.parent, "current_activity")
+            else Activity.get_current()
         )
-        if activity is not None:
-            qs_deleted = qs_deleted.where(ProviderOrClient.activity == activity)
 
-        pclt_ids = [
-            row.provider_clt_id
-            for row in Payment.select(Payment.provider_clt)
-            .where(Payment.deleted == True)
-            .distinct()
-        ]
-        if pclt_ids:
-            qs_ops = _apply_type(
-                ProviderOrClient.select().where(
-                    ProviderOrClient.deleted == False,
-                    ProviderOrClient.id.in_(pclt_ids),
-                )
+        qs_deleted = None
+        if mode_filter in (MODE_ALL, MODE_ACCOUNTS):
+            qs_deleted = _apply_type(
+                ProviderOrClient.select().where(ProviderOrClient.deleted == True)
             )
             if activity is not None:
-                qs_ops = qs_ops.where(ProviderOrClient.activity == activity)
-        else:
-            qs_ops = None
+                qs_deleted = qs_deleted.where(ProviderOrClient.activity == activity)
+
+        qs_ops = None
+        if mode_filter in (MODE_ALL, MODE_OPS):
+            pclt_ids = [
+                row.provider_clt_id
+                for row in Payment.select(Payment.provider_clt)
+                .where(Payment.deleted == True)
+                .distinct()
+            ]
+            if pclt_ids:
+                qs_ops = _apply_type(
+                    ProviderOrClient.select().where(
+                        ProviderOrClient.deleted == False,
+                        ProviderOrClient.id.in_(pclt_ids),
+                    )
+                )
+                if activity is not None:
+                    qs_ops = qs_ops.where(ProviderOrClient.activity == activity)
 
         if provid_clt:
             search = str(provid_clt).strip()
             if search:
-                qs_deleted = qs_deleted.where(ProviderOrClient.name.contains(search))
+                if qs_deleted is not None:
+                    qs_deleted = qs_deleted.where(ProviderOrClient.name.contains(search))
                 if qs_ops is not None:
                     qs_ops = qs_ops.where(ProviderOrClient.name.contains(search))
 
-        for p in qs_deleted.order_by(ProviderOrClient.name):
-            self.addItem(ProviderOrClientQListWidgetItem(p, "account_trash"))
+        if qs_deleted is not None:
+            for p in qs_deleted.order_by(ProviderOrClient.name):
+                self.addItem(ProviderOrClientQListWidgetItem(p, "account_trash"))
         if qs_ops is not None:
             for p in qs_ops.order_by(ProviderOrClient.name):
                 self.addItem(ProviderOrClientQListWidgetItem(p, "ops_trash"))
 
         if hasattr(self.parent, "update_accounts_count"):
             self.parent.update_accounts_count()
+        if hasattr(self.parent, "_update_empty_state"):
+            self.parent._update_empty_state()
         self._autosize_width_to_longest_text()
 
     def _autosize_width_to_longest_text(self):
-        """Ajuste la largeur pour contenir le texte le plus long (par défaut)."""
         fm = QFontMetrics(self.font())
-        max_w = 0
+        max_w = 160
         for i in range(self.count()):
             it = self.item(i)
             if it is None:
                 continue
             max_w = max(max_w, fm.horizontalAdvance(it.text()))
-
-        padding = 24
-        icon_space = 36
-        scrollbar_space = 18 if self.verticalScrollBar().isVisible() else 0
-        target = max_w + padding + icon_space + scrollbar_space
-        if target > 0:
-            self.setMinimumWidth(target)
+        self.setMinimumWidth(min(max_w + 48, 420))
 
     def handleClicked(self):
         item = self.currentItem()
@@ -476,41 +643,31 @@ class ProviderOrClientTableWidget(QListWidget):
         self.provid_clt_id = item.provid_clt_id
 
         if isinstance(self.provid_clt_id, int):
-            self.parent.sub_btt.setEnabled(True)
-            self.parent.add_btt.setEnabled(True)
-            logger.debug("Boutons activés")
+            self.parent.set_action_buttons_enabled(True)
         else:
             if Config.DEVISE_PEP_PROV:
-                logger.debug("Configuration DEVISE_PEP_PROV active")
                 return
-            self.parent.sub_btt.setEnabled(False)
-            self.parent.add_btt.setEnabled(False)
-            logger.debug("Boutons désactivés")
+            self.parent.set_action_buttons_enabled(False)
         self.parent.table.refresh_(provid_clt_id=self.provid_clt_id)
 
 
 class ProviderOrClientQListWidgetItem(QListWidgetItem):
-    """list_entry_mode: account_trash = compte en corbeille, ops_trash = compte actif avec opérations supprimées."""
+    """account_trash = compte soft-deleted ; ops_trash = compte actif avec ops en corbeille."""
 
     def __init__(self, provid_clt, list_entry_mode="account_trash"):
-        logger.debug("Initialisation d'un élément de la liste avec style moderne")
         super(ProviderOrClientQListWidgetItem, self).__init__()
-
         self.provid_clt = provid_clt
         self.list_entry_mode = list_entry_mode
-        self._item_height = 35
-        self.setSizeHint(QSize(0, self._item_height))  # Hauteur légèrement augmentée pour le style moderne
+        self._item_height = 40
+        self.setSizeHint(QSize(0, self._item_height))
         icon = QIcon()
-
         if not isinstance(self.provid_clt, str):
             icon_path = "{}.png".format(
                 Config.img_media + "debt"
                 if self.provid_clt.is_indebted()
                 else Config.img_cmedia + "user_active"
             )
-            logger.debug(f"Chargement de l'icône: {icon_path}")
             icon.addPixmap(QPixmap(icon_path), QIcon.Mode.Normal, QIcon.State.Off)
-
         self.setIcon(icon)
         self.init_text()
 
@@ -525,25 +682,27 @@ class ProviderOrClientQListWidgetItem(QListWidgetItem):
                     )
                     .count()
                 )
-                self.setText(
-                    f"📋 {self.provid_clt.name} — {n} opération(s) en corbeille"
+                self.setText(f"{self.provid_clt.name}  ·  {n} op. en corbeille")
+                self.setToolTip(
+                    f"Compte actif « {self.provid_clt.name} » avec {n} opération(s) "
+                    "supprimée(s). Double-clic pour restaurer les opérations."
                 )
-                self._update_min_width_from_text()
-                return
-            prefix = "⚠️ " if self.provid_clt.is_indebted() else "👤 "
-            self.setText(f"{prefix}{self.provid_clt.name}")
+            else:
+                self.setText(f"{self.provid_clt.name}  ·  compte")
+                self.setToolTip(
+                    f"Compte « {self.provid_clt.name} » en corbeille. "
+                    "Double-clic pour restaurer."
+                )
         except AttributeError:
             font = QFont()
             font.setBold(True)
-            font.setPointSize(13)
             self.setFont(font)
             self.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if not Config.DEVISE_PEP_PROV:
-                self.setText("📋 Tous les comptes")
+            self.setText("Tous les éléments")
+            self.setToolTip("Afficher toutes les opérations en corbeille")
         self._update_min_width_from_text()
 
     def _update_min_width_from_text(self):
-        """Ajuste la largeur minimale de l'item selon son texte (avec marge + icône)."""
         fm = QFontMetrics(self.font())
         min_w = fm.horizontalAdvance(self.text()) + 48
         self.setSizeHint(QSize(max(0, int(min_w)), self._item_height))
@@ -560,7 +719,7 @@ class RapportTableWidget(FTableWidget):
     def __init__(self, parent, *args, **kwargs):
         FTableWidget.__init__(self, parent=parent, *args, **kwargs)
 
-        self.hheaders = ["📅 Date", "📝 Libellé", "💸 Débit", "💰 Crédit", "📊 Solde", ""]
+        self.hheaders = ["Date", "Libellé", "Débit", "Crédit", "Solde", ""]
         self.parent = parent
 
         self.sorter = False
@@ -603,8 +762,6 @@ class RapportTableWidget(FTableWidget):
         return super()._format_for_table(value)
 
     def refresh_(self, provid_clt_id=None, search=None):
-        """ """
-
         self.totals_debit = 0
         self.totals_credit = 0
         self.balance_tt = 0
@@ -635,7 +792,9 @@ class RapportTableWidget(FTableWidget):
                 self.provider_clt = "Tous"
                 self.provid_clt_id = None
                 self.data = []
-                self.parent.label_owner.setText("<h3>Compte introuvable (supprimé définitivement ?)</h3>")
+                self.parent.set_selection_banner(
+                    "<b>Compte introuvable</b> (déjà purgé ?)"
+                )
                 if hasattr(self.parent, "table_provid_clt"):
                     self.parent.table_provid_clt.refresh_(
                         provid_clt=self.parent.search_field.text().strip() or None
@@ -644,15 +803,30 @@ class RapportTableWidget(FTableWidget):
             qs = qs.where(Payment.provider_clt == self.provider_clt)
             solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
             solde = self.parent.format_balance_text(solde)
+            n_ops = qs.count()
+            mode = "compte en corbeille"
+            try:
+                item = self.parent.table_provid_clt.currentItem()
+                if (
+                    isinstance(item, ProviderOrClientQListWidgetItem)
+                    and getattr(item, "list_entry_mode", "") == "ops_trash"
+                ):
+                    mode = "opérations en corbeille"
+            except Exception:
+                pass
             tel = self.provider_clt.phone or "—"
-            msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
+            msg = (
+                f"<b>{self.provider_clt.name}</b> · {mode}<br>"
+                f"<span style='color:palette(mid); font-size:12px;'>"
+                f"{n_ops} opération(s) · Solde {solde} · Tél. {tel}</span>"
+            )
         else:
             self.provider_clt = "Tous"
-            activity = None
-            if hasattr(self.parent, "current_activity"):
-                activity = self.parent.current_activity()
-            else:
-                activity = Activity.get_current()
+            activity = (
+                self.parent.current_activity()
+                if hasattr(self.parent, "current_activity")
+                else Activity.get_current()
+            )
             if activity is not None:
                 account_ids = [
                     a.id
@@ -664,8 +838,13 @@ class RapportTableWidget(FTableWidget):
                     qs = qs.where(Payment.provider_clt.in_(account_ids))
                 else:
                     qs = qs.where(Payment.id == -1)
-            msg = self.provider_clt
-        self.parent.label_owner.setText(msg)
+            n_ops = qs.count()
+            msg = (
+                f"<b>Toutes les opérations</b><br>"
+                f"<span style='color:palette(mid); font-size:12px;'>"
+                f"{n_ops} opération(s) en corbeille</span>"
+            )
+        self.parent.set_selection_banner(msg)
 
         self.data = [
             (
@@ -690,8 +869,8 @@ class RapportTableWidget(FTableWidget):
         if row < 0 or row >= len(self.data):
             return
         menu = QMenu()
-        act_restore = menu.addAction("♻️ Restaurer cette opération")
-        act_erase = menu.addAction("🗑️ Supprimer définitivement…")
+        act_restore = menu.addAction("Restaurer cette opération")
+        act_erase = menu.addAction("Supprimer définitivement…")
         chosen = menu.exec(self.mapToGlobal(pos))
         if chosen is None:
             return
@@ -701,29 +880,29 @@ class RapportTableWidget(FTableWidget):
             if chosen == act_restore:
                 payment.restore_from_trash()
                 if mw:
-                    mw.Notify("✅ Opération restaurée", "success")
+                    mw.Notify("Opération restaurée", "success")
             elif chosen == act_erase:
                 reply = QMessageBox.question(
                     self,
                     "Suppression définitive",
-                    "Supprimer définitivement cette opération ? Cette action est irréversible.",
+                    "Supprimer définitivement cette opération ?\nCette action est irréversible.",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No,
                 )
                 if reply == QMessageBox.StandardButton.Yes:
                     payment.deletes_data()
                     if mw:
-                        mw.Notify("✅ Opération supprimée définitivement", "success")
+                        mw.Notify("Opération supprimée définitivement", "success")
         except Exception as e:
             logger.exception("Poubelle menu opération: %s", e)
             if mw:
-                mw.Notify(f"❌ Erreur : {e}", "error")
+                mw.Notify(str(e), "error")
         if hasattr(self.parent, "table_provid_clt"):
             self.parent.table_provid_clt.refresh_(
                 provid_clt=self.parent.search_field.text().strip() or None
             )
-        if hasattr(self.parent, "update_accounts_count"):
-            self.parent.update_accounts_count()
+        if hasattr(self.parent, "refresh_header_stats"):
+            self.parent.refresh_header_stats()
         pid = self.provid_clt_id if isinstance(self.provid_clt_id, int) else None
         self.refresh_(provid_clt_id=pid)
 
@@ -734,17 +913,15 @@ class RapportTableWidget(FTableWidget):
         self.totals_debit = 0
         self.totals_credit = 0
         self.balance_tt = 0
-        cp = 0
         for row_num in range(0, self.data.__len__()):
             mtt_debit = is_float(str(self.item(row_num, 2).text()))
             mtt_credit = is_float(str(self.item(row_num, 3).text()))
             self.totals_debit += mtt_debit
             self.totals_credit += mtt_credit
-            cp += 1
 
         self.balance_tt = self.totals_credit - self.totals_debit
 
-        self.label_mov_tt = "Totals mouvements: "
+        self.label_mov_tt = "Totaux : "
         self.setItem(nb_rows, 1, TotalsWidget(self.label_mov_tt))
         self.setItem(
             nb_rows,
@@ -767,8 +944,16 @@ class RapportTableWidget(FTableWidget):
 
     def dict_data(self):
         title = "Movements"
-        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
-        client_id = getattr(self.provider_clt, 'id', None) if hasattr(self.provider_clt, 'id') else None
+        client_name = (
+            self.provider_clt.name
+            if hasattr(self.provider_clt, "name")
+            else str(self.provider_clt)
+        )
+        client_id = (
+            getattr(self.provider_clt, "id", None)
+            if hasattr(self.provider_clt, "id")
+            else None
+        )
         return {
             "file_name": title,
             "headers": self.hheaders[:-1],
@@ -780,11 +965,7 @@ class RapportTableWidget(FTableWidget):
             ],
             "sheet": title,
             "widths": self.stretch_columns,
-            "format_money": [
-                "C:C",
-                "D:D",
-                "E:E",
-            ],
+            "format_money": ["C:C", "D:D", "E:E"],
             "exclude_row": len(self.data) - 1,
             "date": self.parent.now,
             "others": [
@@ -869,8 +1050,6 @@ class RapportCISSTableWidget(FTableWidget):
         return super()._item_for_data(row, column, data, context)
 
     def refresh_(self, provid_clt_id=None, search=None):
-        """ """
-
         self.totals_debit = 0
         self.totals_credit = 0
         self.balance_tt = 0
@@ -900,7 +1079,9 @@ class RapportCISSTableWidget(FTableWidget):
                 self.provider_clt = "Tous"
                 self.provid_clt_id = None
                 self.data = []
-                self.parent.label_owner.setText("<h3>Compte introuvable (supprimé définitivement ?)</h3>")
+                self.parent.set_selection_banner(
+                    "<b>Compte introuvable</b> (déjà purgé ?)"
+                )
                 if hasattr(self.parent, "table_provid_clt"):
                     self.parent.table_provid_clt.refresh_(
                         provid_clt=self.parent.search_field.text().strip() or None
@@ -908,15 +1089,21 @@ class RapportCISSTableWidget(FTableWidget):
                 return
             qs = qs.where(Payment.provider_clt == self.provider_clt)
             solde = device_amount(self.provider_clt.last_remaining(), self.provider_clt)
+            solde = self.parent.format_balance_text(solde)
             tel = self.provider_clt.phone or "—"
-            msg = f"<h3>Compte : {self.provider_clt.name} — Solde : {solde}</h3><h4>Tel : {tel}</h4>"
+            n_ops = qs.count()
+            msg = (
+                f"<b>{self.provider_clt.name}</b><br>"
+                f"<span style='color:palette(mid); font-size:12px;'>"
+                f"{n_ops} opération(s) · Solde {solde} · Tél. {tel}</span>"
+            )
         else:
             self.provider_clt = "Tous"
-            activity = None
-            if hasattr(self.parent, "current_activity"):
-                activity = self.parent.current_activity()
-            else:
-                activity = Activity.get_current()
+            activity = (
+                self.parent.current_activity()
+                if hasattr(self.parent, "current_activity")
+                else Activity.get_current()
+            )
             if activity is not None:
                 account_ids = [
                     a.id
@@ -928,8 +1115,13 @@ class RapportCISSTableWidget(FTableWidget):
                     qs = qs.where(Payment.provider_clt.in_(account_ids))
                 else:
                     qs = qs.where(Payment.id == -1)
-            msg = self.provider_clt
-        self.parent.label_owner.setText(msg)
+            n_ops = qs.count()
+            msg = (
+                f"<b>Toutes les opérations</b><br>"
+                f"<span style='color:palette(mid); font-size:12px;'>"
+                f"{n_ops} opération(s) en corbeille</span>"
+            )
+        self.parent.set_selection_banner(msg)
 
         self.data = [
             (
@@ -955,8 +1147,8 @@ class RapportCISSTableWidget(FTableWidget):
         if row < 0 or row >= len(self.data):
             return
         menu = QMenu()
-        act_restore = menu.addAction("♻️ Restaurer cette opération")
-        act_erase = menu.addAction("🗑️ Supprimer définitivement…")
+        act_restore = menu.addAction("Restaurer cette opération")
+        act_erase = menu.addAction("Supprimer définitivement…")
         chosen = menu.exec(self.mapToGlobal(pos))
         if chosen is None:
             return
@@ -966,29 +1158,29 @@ class RapportCISSTableWidget(FTableWidget):
             if chosen == act_restore:
                 payment.restore_from_trash()
                 if mw:
-                    mw.Notify("✅ Opération restaurée", "success")
+                    mw.Notify("Opération restaurée", "success")
             elif chosen == act_erase:
                 reply = QMessageBox.question(
                     self,
                     "Suppression définitive",
-                    "Supprimer définitivement cette opération ? Cette action est irréversible.",
+                    "Supprimer définitivement cette opération ?\nCette action est irréversible.",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No,
                 )
                 if reply == QMessageBox.StandardButton.Yes:
                     payment.deletes_data()
                     if mw:
-                        mw.Notify("✅ Opération supprimée définitivement", "success")
+                        mw.Notify("Opération supprimée définitivement", "success")
         except Exception as e:
             logger.exception("Poubelle menu opération (CISS): %s", e)
             if mw:
-                mw.Notify(f"❌ Erreur : {e}", "error")
+                mw.Notify(str(e), "error")
         if hasattr(self.parent, "table_provid_clt"):
             self.parent.table_provid_clt.refresh_(
                 provid_clt=self.parent.search_field.text().strip() or None
             )
-        if hasattr(self.parent, "update_accounts_count"):
-            self.parent.update_accounts_count()
+        if hasattr(self.parent, "refresh_header_stats"):
+            self.parent.refresh_header_stats()
         pid = self.provid_clt_id if isinstance(self.provid_clt_id, int) else None
         self.refresh_(provid_clt_id=pid)
 
@@ -1000,7 +1192,6 @@ class RapportCISSTableWidget(FTableWidget):
         self.totals_debit = 0
         self.totals_credit = 0
         self.balance_tt = 0
-        cp = 0
         for row_num in range(0, self.data.__len__()):
             mtt_weight = is_float(str(self.item(row_num, 2).text()))
             mtt_debit = is_float(str(self.item(row_num, 3).text()))
@@ -1008,11 +1199,10 @@ class RapportCISSTableWidget(FTableWidget):
             self.totals_weight += mtt_weight
             self.totals_debit += mtt_debit
             self.totals_credit += mtt_credit
-            cp += 1
 
         self.balance_tt = self.totals_credit - self.totals_debit
 
-        self.label_mov_tt = "Totals mouvements: "
+        self.label_mov_tt = "Totaux : "
         self.setItem(nb_rows, 1, TotalsWidget(self.label_mov_tt))
         self.setItem(
             nb_rows,
@@ -1034,8 +1224,16 @@ class RapportCISSTableWidget(FTableWidget):
 
     def dict_data(self):
         title = "Movements"
-        client_name = self.provider_clt.name if hasattr(self.provider_clt, 'name') else str(self.provider_clt)
-        client_id = getattr(self.provider_clt, 'id', None) if hasattr(self.provider_clt, 'id') else None
+        client_name = (
+            self.provider_clt.name
+            if hasattr(self.provider_clt, "name")
+            else str(self.provider_clt)
+        )
+        client_id = (
+            getattr(self.provider_clt, "id", None)
+            if hasattr(self.provider_clt, "id")
+            else None
+        )
         return {
             "file_name": title,
             "headers": self.hheaders[:-1],
@@ -1048,11 +1246,7 @@ class RapportCISSTableWidget(FTableWidget):
             ],
             "sheet": title,
             "widths": self.stretch_columns,
-            "format_money": [
-                "C:C",
-                "D:D",
-                "E:E",
-            ],
+            "format_money": ["C:C", "D:D", "E:E"],
             "exclude_row": len(self.data) - 1,
             "date": self.parent.now,
             "others": [
